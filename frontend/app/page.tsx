@@ -8,6 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { SessionCard } from "@/components/session-card";
 import { StackCheck } from "@/components/stack-check";
 
 const surfaces = [
@@ -20,7 +21,7 @@ export default function Home() {
     <div className="flex flex-1 flex-col bg-[#dfe6ee] bg-[linear-gradient(to_right,rgb(26_35_50/0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgb(26_35_50/0.08)_1px,transparent_1px)] bg-[size:24px_24px]">
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center gap-8 px-4 py-12">
         <header className="border-l-4 border-[#c45c26] pl-4">
-          <p className="font-mono text-sm text-[#1a2332]/70">Fase 0 · monorepo</p>
+          <p className="font-mono text-sm text-[#1a2332]/70">Fase 2 · autenticación</p>
           <h1 className="mt-1 text-3xl font-semibold tracking-tight text-[#1a2332]">
             Álgebra vectorial
           </h1>
@@ -29,6 +30,8 @@ export default function Home() {
             FastAPI y Next.js levantan sin lógica de negocio.
           </p>
         </header>
+
+        <SessionCard />
 
         <Card className="bg-white/90">
           <CardHeader>

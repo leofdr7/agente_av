@@ -4,4 +4,6 @@ python-dotenv
 pydantic
 pydantic-settings
 httpx
+PyJWT[crypto]
 pytest
+supabase
