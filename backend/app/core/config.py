@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     # Bypass de autenticacion SOLO para testing local. Nunca usar en produccion.
     auth_disabled: bool = False
 
+    # Informes PDF/DOCX: bucket privado de Storage y caducidad de las URLs firmadas.
+    reports_bucket: str = "reports"
+    reports_signed_url_ttl_seconds: int = 604800
+
     @field_validator(
         "voyage_api_key",
         "openai_api_key",

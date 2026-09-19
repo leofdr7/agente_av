@@ -12,3 +12,6 @@ supabase
 voyageai
 openai
 anthropic
+python-docx
+weasyprint
+jinja2

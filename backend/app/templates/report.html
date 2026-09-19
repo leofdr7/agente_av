@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>{{ ctx.project_title }} — Informe de estimación</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 18mm 16mm 18mm 16mm;
+        @bottom-center {
+          content: "TechChip Systems S.A. · Informe generado automáticamente · página " counter(page);
+          font-size: 8pt;
+          color: #5b6575;
+        }
+      }
+      html, body {
+        font-family: "DejaVu Sans", "Liberation Sans", sans-serif;
+        color: #1a2332;
+        font-size: 10.5pt;
+        line-height: 1.45;
+      }
+      header.masthead {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        border-bottom: 3px solid #0f2040;
+        padding-bottom: 10px;
+        margin-bottom: 18px;
+      }
+      header.masthead img {
+        width: 48px;
+        height: 48px;
+      }
+      header.masthead .brand {
+        font-size: 11pt;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #0f2040;
+        font-weight: 700;
+      }
+      header.masthead .meta {
+        margin-left: auto;
+        text-align: right;
+        font-size: 9pt;
+        color: #5b6575;
+      }
+      h1 {
+        font-size: 18pt;
+        color: #0f2040;
+        margin: 0 0 6px 0;
+        font-weight: 700;
+      }
+      h2 {
+        font-size: 13pt;
+        color: #0f2040;
+        border-bottom: 1px solid #c5ced9;
+        padding-bottom: 4px;
+        margin: 22px 0 10px 0;
+      }
+      h3 {
+        font-size: 11.5pt;
+        color: #1e5a8c;
+        margin: 16px 0 8px 0;
+      }
+      p { margin: 0 0 8px 0; }
+      .muted { color: #5b6575; font-size: 9.5pt; }
+      .alert {
+        background: #f8efe6;
+        border-left: 4px solid #b45309;
+        padding: 8px 12px;
+        margin: 10px 0;
+      }
+      .ok {
+        background: #eef6f0;
+        border-left: 4px solid #1f7a4d;
+        padding: 8px 12px;
+        margin: 10px 0;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 8px 0 12px 0;
+        font-size: 8.5pt;
+        font-variant-numeric: tabular-nums;
+      }
+      th, td {
+        border: 1px solid #c5ced9;
+        padding: 3px 6px;
+        text-align: right;
+      }
+      th {
+        background: #0f2040;
+        color: #fff;
+        font-weight: 600;
+        text-align: center;
+      }
+      td.label, th.label { text-align: left; }
+      .step {
+        margin: 10px 0 14px 0;
+        page-break-inside: avoid;
+      }
+      .step .desc {
+        font-family: "DejaVu Sans Mono", "Liberation Mono", monospace;
+        font-size: 9pt;
+        margin-bottom: 4px;
+      }
+      .equation {
+        font-family: "DejaVu Sans Mono", "Liberation Mono", monospace;
+        font-size: 9.5pt;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="masthead">
+      <img src="logo_placeholder.png" alt="Logo de la empresa (placeholder)" />
+      <div>
+        <div class="brand">{{ ctx.company }}</div>
+        <div class="muted">Estimación de plan de producción</div>
+      </div>
+      <div class="meta">
+        {{ ctx.generated_at.strftime("%Y-%m-%d %H:%M UTC") }}<br />
+        Estimación {{ ctx.estimation_id }}
+      </div>
+    </header>
+
+    <h1>{{ ctx.project_title }}</h1>
+    <p class="muted">Enunciado: {{ ctx.problem_text }}</p>
+
+    <h2>Resumen ejecutivo</h2>
+    {% for para in ctx.executive_paragraphs %}
+    <p>{{ para }}</p>
+    {% endfor %}
+
+    <h2>Resolución multimétodo</h2>
+    <p>
+      Cada subsección reproduce la traza analítica registrada por el motor
+      (operaciones elementales de fila y, cuando aplica, el despeje de cada
+      componente de X). No se recalcula nada en este informe.
+    </p>
+
+    {% for method in ctx.methods %}
+    <h3>{{ method.title }}</h3>
+    {% if not method.ran %}
+    <div class="alert">{{ method.skip_reason }}</div>
+    {% else %}
+      {% if method.inverse_matrix %}
+      <p>Matriz inversa A<sup>−1</sup>:</p>
+      {{ method.inverse_html | safe }}
+      {% endif %}
+      {% for step in method.step_blocks %}
+      <div class="step">
+        <div class="desc">{{ step.description }}</div>
+        {{ step.matrix_html | safe }}
+      </div>
+      {% endfor %}
+      {% if method.component_steps %}
+      <p>Despeje de las componentes de X:</p>
+      <ul>
+        {% for item in method.component_steps %}
+        <li class="equation">{{ item.equation }} = {{ item.value | fmt }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      {% if method.solution %}
+      <p>Vector solución X = ({{ method.solution | join_fmt }}).</p>
+      {% endif %}
+    {% endif %}
+    {% endfor %}
+
+    <h2>Tabla comparativa</h2>
+    {% if ctx.comparison_available %}
+    <table>
+      <thead>
+        <tr>
+          <th class="label">Variable</th>
+          {% for title in ctx.method_titles %}
+          <th>{{ title }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in ctx.comparison_rows %}
+        <tr>
+          <td class="label">{{ row.label }}</td>
+          {% for value in row.values %}
+          <td>{{ value }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if ctx.methods_agree %}
+    <div class="ok">{{ ctx.comparison_verdict }}</div>
+    {% else %}
+    <div class="alert">{{ ctx.comparison_verdict }}</div>
+    {% endif %}
+    {% else %}
+    <div class="alert">{{ ctx.comparison_verdict }}</div>
+    {% endif %}
+
+    <h2>Verificación de sustitución directa</h2>
+    {% if ctx.substitution %}
+    <p>
+      E = |AX − B| = {{ ctx.substitution.error_norm | fmt }}
+      (tolerancia {{ ctx.substitution.tolerance | fmt }}).
+      {% if ctx.substitution.within_tolerance %}
+      El residual queda dentro de tolerancia.
+      {% else %}
+      El residual <strong>no</strong> queda dentro de tolerancia.
+      {% endif %}
+    </p>
+    {% else %}
+    <div class="alert">No hay verificación de sustitución: el motor no entregó un vector X.</div>
+    {% endif %}
+
+    <h2>Diagnóstico y conclusiones</h2>
+    {% if ctx.diagnosis %}
+    <p>
+      Clasificación: <strong>{{ ctx.diagnosis_label }}</strong>.
+      det(A) = {{ ctx.diagnosis.determinant | fmt }},
+      rango(A) = {{ ctx.diagnosis.rank_a }},
+      rango([A|B]) = {{ ctx.diagnosis.rank_augmented }}.
+      {% if ctx.diagnosis.is_singular %}Sistema singular.{% endif %}
+    </p>
+    <p class="muted">{{ ctx.diagnosis.message }}</p>
+    {% endif %}
+    {% for para in ctx.conclusion_paragraphs %}
+    {% if ctx.needs_alert %}
+    <div class="alert">{{ para }}</div>
+    {% else %}
+    <p>{{ para }}</p>
+    {% endif %}
+    {% endfor %}
+  </body>
+</html>
