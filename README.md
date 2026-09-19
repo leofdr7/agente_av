@@ -110,6 +110,77 @@ empleado que la pidió y un `result_json` con la matriz y el vector usados, la t
 de cada herramienta con sus argumentos y su salida, la validación cruzada y la
 respuesta final del agente.
 
+### Proyectos y lecturas de estimaciones
+
+Los expedientes viven en `projects` (nombre, presupuesto, estado). El frontend
+lista solo los del empleado autenticado (`created_by`):
+
+```bash
+curl http://localhost:8000/api/v1/projects \
+  -H "Authorization: Bearer $CLERK_TOKEN"
+
+curl -X POST http://localhost:8000/api/v1/projects \
+  -H "Authorization: Bearer $CLERK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Línea AI-Edge", "budget": 120000, "status": "active"}'
+```
+
+`GET /api/v1/projects/{id}` y `PATCH /api/v1/projects/{id}` leen o actualizan un
+expediente propio. `GET /api/v1/projects/{id}/estimations` y
+`GET /api/v1/estimations` listan el historial (sin la traza completa).
+`GET /api/v1/estimations/{id}` devuelve el resultado, el proyecto y los informes
+ya generados.
+
+### Informes PDF/DOCX
+
+`POST /api/v1/estimations/{id}/report` (token de Clerk) lee el registro completo
+de `estimations`, genera un DOCX (`python-docx`) y un PDF (WeasyPrint a partir de
+una plantilla HTML), los sube al bucket privado `reports` de Supabase Storage y
+guarda en la tabla `reports` la URL firmada, el tipo y la fecha. Responde las
+URLs de descarga.
+
+```bash
+curl -X POST http://localhost:8000/api/v1/estimations/<uuid>/report \
+  -H "Authorization: Bearer $CLERK_TOKEN"
+```
+
+El PDF real exige Pango/Cairo **en el sistema**, no solo en el venv. El
+`Dockerfile` del backend ya las instala. En desarrollo local, sin Docker:
+
+**Debian / Ubuntu**
+
+```bash
+sudo apt-get install libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 \
+  libffi8 shared-mime-info fonts-dejavu-core
+```
+
+**Fedora / RHEL**
+
+```bash
+sudo dnf install pango gdk-pixbuf2 libffi
+```
+
+**Arch Linux**
+
+```bash
+sudo pacman -S pango gdk-pixbuf2 cairo libffi
+```
+
+**macOS**
+
+```bash
+brew install pango gdk-pixbuf libffi
+```
+
+**Windows:** usar Docker (`docker compose up --build`). Compilar Pango a mano no
+está soportado.
+
+Si esas librerías faltan, WeasyPrint no puede escribir PDF. Los tests **no se
+saltan** ese caso: o generan un PDF real, o usan el renderer documentado
+`mock_pdf_renderer` (los bytes incluyen `MOCK WeasyPrint`). Un `pytest -q` en
+una máquina sin Pango sigue en verde, pero el PDF de esas corridas no es un
+informe visual.
+
 ### Tests
 
 ```bash
@@ -130,7 +201,18 @@ cp .env.example .env.local   # completar con las claves de Clerk
 npm run dev
 ```
 
-App disponible en `http://localhost:3000`.
+App disponible en `http://localhost:3000`. Tras iniciar sesión:
+
+| Ruta | Pantalla |
+| --- | --- |
+| `/` | Proyectos del empleado (estado y presupuesto) |
+| `/nueva` | Formulario para crear o elegir proyecto y enviar el problema al agente |
+| `/estimaciones/{id}` | Resumen ejecutivo, pasos de cálculo, descarga PDF/DOCX |
+| `/historial` | Estimaciones de todos los proyectos |
+| `/proyectos/{id}` | Historial de un expediente |
+
+En el celular la navegación es una barra inferior fija (Proyectos, Nueva,
+Historial). En `md` y superior, la misma lista vive en una barra lateral.
 
 ## Autenticación
 
@@ -160,6 +242,8 @@ Backend (`backend/.env`, plantilla en `backend/.env.example`):
 | `CLERK_AUTHORIZED_PARTIES` | Orígenes del frontend permitidos, separados por coma. Se comparan con el claim `azp` (protección CSRF) y alimentan CORS. |
 | `ANTHROPIC_API_KEY` | Clave de la API de Anthropic que usa el agente orquestador. Sin ella, `POST /api/v1/agent/run` responde `503`. |
 | `ANTHROPIC_MODEL` | Opcional. Modelo del orquestador; por defecto `claude-sonnet-5`. |
+| `REPORTS_BUCKET` | Bucket privado de Supabase Storage para los informes. Por defecto `reports`. Debe existir como campo de `Settings`: una variable extra en `.env` que no esté declarada hace fallar el arranque. |
+| `REPORTS_SIGNED_URL_TTL_SECONDS` | Caducidad de las URLs firmadas de descarga, en segundos. Por defecto `604800` (7 días). |
 
 El backend no necesita `CLERK_SECRET_KEY`: verifica los tokens localmente con las
 claves públicas del JWKS.
@@ -207,7 +291,7 @@ curl http://localhost:8000/health
 curl -i http://localhost:8000/api/v1/me
 
 # Frontend: abrir http://localhost:3000; sin sesión redirige a /sign-in.
-# Tras iniciar sesión, la tarjeta "Sesión" muestra el empleado devuelto por /api/v1/me.
+# Tras iniciar sesión, `/` lista los proyectos del empleado (vacío si aún no hay).
 ```
 
 Tests del backend (incluyen verificación JWT y sincronización de empleados):
