@@ -5,5 +5,9 @@ pydantic
 pydantic-settings
 httpx
 PyJWT[crypto]
+numpy
+sympy
 pytest
 supabase
+voyageai
+openai
