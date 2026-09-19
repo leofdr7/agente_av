@@ -5,6 +5,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from supabase import Client
 
 from app.core.security import InvalidTokenError, verify_clerk_token
+from app.core.config import settings
 from app.db.supabase import get_supabase_client
 from app.models.employee import ClerkClaims, Employee
 from app.services.employees import IncompleteProfileError, get_or_create_employee
@@ -19,6 +20,8 @@ def get_token_claims(
     ],
 ) -> ClerkClaims:
     """Exige `Authorization: Bearer <session token de Clerk>` y devuelve sus claims."""
+    if settings.auth_disabled:
+        return ClerkClaims(sub="test-user-local", name="Test Local", role="admin")
     if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

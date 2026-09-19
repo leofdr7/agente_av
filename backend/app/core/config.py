@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     # Orígenes del frontend autorizados a emitir tokens (claim `azp`), separados por coma.
     clerk_authorized_parties: str = "http://localhost:3000"
 
+
+
     # RAG / embeddings. Indexación y búsqueda deben usar el mismo proveedor y modelo.
     # Dimensión fija en 512 para coincidir con knowledge_chunks.embedding.
     embedding_provider: Literal["voyage", "openai"] = "voyage"
@@ -29,11 +31,18 @@ class Settings(BaseSettings):
     embedding_model: str | None = None
     vault_path: str | None = None
 
+    # Anthropic: orquestador del agente (tool use). El modelo nunca calcula AX=B.
+    anthropic_api_key: str | None = None
+    anthropic_model: str = "claude-sonnet-5"
+    # Bypass de autenticacion SOLO para testing local. Nunca usar en produccion.
+    auth_disabled: bool = False
+
     @field_validator(
         "voyage_api_key",
         "openai_api_key",
         "embedding_model",
         "vault_path",
+        "anthropic_api_key",
         mode="before",
     )
     @classmethod

@@ -41,12 +41,85 @@ cp backend/.env.example backend/.env
 docker compose up --build
 ```
 
+### Motor de sistemas lineales
+
+Núcleo determinista que resuelve `AX=B` por eliminación de Gauss, Gauss-Jordan y
+matriz inversa, sin intervención del LLM. Antes de resolver calcula `det(A)`,
+`rango(A)` y `rango([A|B])` con aritmética exacta (SymPy): si el sistema es
+singular se detiene y devuelve el diagnóstico (`incompatible` o `compatible
+indeterminado`) sin ningún vector solución. Cuando sí resuelve, contrasta los
+tres métodos entre sí, verifica `‖AX - B‖` y marca como `infeasible` cualquier
+solución con componentes negativas.
+
+Vía API (requiere token de Clerk):
+
+```bash
+curl -X POST http://localhost:8000/api/v1/linear-systems/solve \
+  -H "Authorization: Bearer $CLERK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"A": [[2,1],[1,3]], "B": [4,5]}'
+```
+
+Vía consola, sin pasar por la API ni por Clerk:
+
+```bash
+cd backend
+python -m app.cli.linear_systems sistema.json --no-steps
+cat sistema.json | python -m app.cli.linear_systems --stdin
+```
+
+`sistema.json` acepta `{"A": [[...]], "B": [...], "variable_names": [...]}`.
+Códigos de salida: `0` resuelto, `1` sistema singular, `2` entrada inválida,
+`3` fallo interno del motor.
+
+### Agente orquestador (Claude + tool use)
+
+`app/services/agent.py` conecta Claude (`claude-sonnet-5` por defecto) como
+orquestador: el modelo no calcula, decide qué herramienta llamar y traduce lo que
+devuelve el motor a lenguaje de negocio. Las cinco herramientas son
+`buscar_conocimiento` (RAG sobre el vault), `diagnosticar_sistema` (rango y
+determinante) y `resolver_por_gauss`, `resolver_por_gauss_jordan` y
+`resolver_por_matriz_inversa`.
+
+El system prompt le prohíbe resolver `AX=B` o inventar valores de X y le exige
+diagnosticar antes de resolver. Además, cada herramienta de resolución vuelve a
+diagnosticar el sistema por su cuenta: si es singular, devuelve el diagnóstico como
+error y el solver nunca corre, así que el modelo no puede obtener un vector X de un
+sistema sin solución única. Cuando los tres métodos ya corrieron, el resultado del
+tercero incluye `validacion_cruzada` (comparación entre métodos, `‖AX - B‖` y
+factibilidad) para que el modelo compare sin recalcular.
+
+```bash
+curl -X POST http://localhost:8000/api/v1/agent/run \
+  -H "Authorization: Bearer $CLERK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "problem_text": "Nos quedamos cortos de resina de encapsulado, ¿qué plan es viable?",
+    "project_id": "<uuid de projects>",
+    "A": [[2,1],[1,3]],
+    "B": [4,5]
+  }'
+```
+
+`A` y `B` son opcionales y van juntos: si se omiten, el modelo extrae los
+coeficientes del enunciado. `variable_names` (líneas de producto, por columna) y
+`resource_names` (recursos, por fila) alimentan la interpretación semántica.
+
+Cada corrida se registra en `estimations`: el enunciado, el `project_id`, el
+empleado que la pidió y un `result_json` con la matriz y el vector usados, la traza
+de cada herramienta con sus argumentos y su salida, la validación cruzada y la
+respuesta final del agente.
+
 ### Tests
 
 ```bash
 cd backend
 pytest
 ```
+
+Los tests del motor usan el caso TechChip Systems S.A. definido en
+`tests/fixtures/techchip.py`. El vector de disponibilidades activo se controla
+con la constante `DATASET_B`.
 
 ## Frontend
 
@@ -85,6 +158,8 @@ Backend (`backend/.env`, plantilla en `backend/.env.example`):
 | `CLERK_JWKS_URL` | URL del JWKS de la instancia: Frontend API URL + `/.well-known/jwks.json` (Dashboard → API keys). El backend descarga y cachea las claves públicas para verificar la firma RS256. |
 | `CLERK_ISSUER` | Opcional. Valor esperado del claim `iss`. Si se omite se deriva de `CLERK_JWKS_URL`. |
 | `CLERK_AUTHORIZED_PARTIES` | Orígenes del frontend permitidos, separados por coma. Se comparan con el claim `azp` (protección CSRF) y alimentan CORS. |
+| `ANTHROPIC_API_KEY` | Clave de la API de Anthropic que usa el agente orquestador. Sin ella, `POST /api/v1/agent/run` responde `503`. |
+| `ANTHROPIC_MODEL` | Opcional. Modelo del orquestador; por defecto `claude-sonnet-5`. |
 
 El backend no necesita `CLERK_SECRET_KEY`: verifica los tokens localmente con las
 claves públicas del JWKS.

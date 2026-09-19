@@ -11,3 +11,4 @@ pytest
 supabase
 voyageai
 openai
+anthropic

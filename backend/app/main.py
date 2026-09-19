@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.agent import router as agent_router
 from app.api.deps import get_current_employee
 from app.api.health import router as health_router
 from app.api.linear_systems import router as linear_systems_router
@@ -24,4 +25,5 @@ app.include_router(health_router)
 api_v1 = APIRouter(prefix="/api/v1", dependencies=[Depends(get_current_employee)])
 api_v1.include_router(me_router)
 api_v1.include_router(linear_systems_router)
+api_v1.include_router(agent_router)
 app.include_router(api_v1)

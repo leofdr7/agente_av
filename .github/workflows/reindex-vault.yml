@@ -1,0 +1,48 @@
+# Reindexa el vault de Obsidian en pgvector cuando cambian las notas.
+#
+# Secrets requeridos:
+#   SUPABASE_URL
+#   SUPABASE_SERVICE_KEY
+#   VOYAGE_API_KEY          (o OPENAI_API_KEY si EMBEDDING_PROVIDER=openai)
+#   CLERK_JWKS_URL          (requerido al importar Settings del backend)
+#
+# Opcional:
+#   OPENAI_API_KEY
+#   EMBEDDING_PROVIDER      (default: voyage)
+#   EMBEDDING_MODEL
+
+name: Reindex Obsidian vault
+
+on:
+  push:
+    paths:
+      - "vault/**"
+      - "backend/scripts/index_vault.py"
+      - "backend/app/services/chunking.py"
+      - "backend/app/services/embeddings.py"
+      - "backend/app/services/vault_index.py"
+      - "backend/app/services/rag.py"
+      - ".github/workflows/reindex-vault.yml"
+  workflow_dispatch:
+
+jobs:
+  reindex:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Index vault
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CLERK_JWKS_URL: ${{ secrets.CLERK_JWKS_URL }}
+        run: python scripts/index_vault.py
