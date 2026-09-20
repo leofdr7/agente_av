@@ -46,21 +46,33 @@ export function EstimationForm({ projects }: { projects: Project[] }) {
   };
 
   return (
-    <form action={action} className="relative space-y-6">
+    <form
+      action={action}
+      className="relative space-y-6"
+      aria-busy={pending}
+      onSubmit={(event) => {
+        if (pending) event.preventDefault();
+      }}
+    >
       <input type="hidden" name="mode" value={mode} />
 
-      <fieldset className="space-y-3">
+      <fieldset className="space-y-3" disabled={pending}>
         <legend className="text-sm font-medium text-ink">Proyecto</legend>
         <div className="grid grid-cols-2 gap-px bg-ink/15 ring-1 ring-ink/15">
           <ModeButton
             current={mode}
             value="existing"
-            disabled={projects.length === 0}
+            disabled={projects.length === 0 || pending}
             onSelect={chooseMode}
           >
             Existente
           </ModeButton>
-          <ModeButton current={mode} value="new" onSelect={chooseMode}>
+          <ModeButton
+            current={mode}
+            value="new"
+            disabled={pending}
+            onSelect={chooseMode}
+          >
             Nuevo
           </ModeButton>
         </div>
@@ -74,7 +86,8 @@ export function EstimationForm({ projects }: { projects: Project[] }) {
               value={projectId}
               onChange={(event) => chooseProject(event.target.value)}
               required
-              className="h-9 w-full rounded-md border border-input bg-sheet px-2.5 text-base md:text-sm"
+              disabled={pending}
+              className="h-9 w-full rounded-md border border-input bg-sheet px-2.5 text-base md:text-sm disabled:opacity-60"
             >
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>
@@ -93,6 +106,7 @@ export function EstimationForm({ projects }: { projects: Project[] }) {
               required
               maxLength={200}
               placeholder="Línea AI-Edge, turno noche"
+              disabled={pending}
               className="h-9 bg-sheet"
             />
           </div>
@@ -108,6 +122,7 @@ export function EstimationForm({ projects }: { projects: Project[] }) {
           value={budget}
           onChange={(event) => setBudget(event.target.value)}
           placeholder="120000"
+          disabled={pending}
           className="h-9 bg-sheet font-mono"
         />
         <p className="text-xs text-steel">
@@ -124,6 +139,7 @@ export function EstimationForm({ projects }: { projects: Project[] }) {
           minLength={8}
           rows={8}
           placeholder="Nos quedamos cortos de resina de encapsulado. ¿Qué plan de producción es viable con el inventario actual?"
+          disabled={pending}
           className="min-h-40 bg-sheet"
         />
       </div>
@@ -140,8 +156,9 @@ export function EstimationForm({ projects }: { projects: Project[] }) {
 
       {pending ? (
         <div
-          className="absolute inset-0 flex items-end bg-paper/70 p-4 backdrop-blur-[1px] sm:items-center sm:justify-center"
+          className="absolute inset-0 z-10 flex items-end bg-paper/70 p-4 backdrop-blur-[1px] sm:items-center sm:justify-center"
           aria-live="polite"
+          role="status"
         >
           <p className="max-w-sm border-l-[3px] border-copper bg-sheet px-3 py-2 text-sm text-ink shadow-sm">
             El agente está diagnosticando y resolviendo el sistema. Puede tardar

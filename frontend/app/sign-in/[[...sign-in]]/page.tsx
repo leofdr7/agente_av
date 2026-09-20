@@ -1,9 +1,11 @@
 import { SignIn } from "@clerk/nextjs";
 
+import { AuthFrame } from "@/components/auth-frame";
+
 export default function SignInPage() {
   return (
-    <main className="shop-grid flex flex-1 items-center justify-center px-4 py-12">
+    <AuthFrame>
       <SignIn />
-    </main>
+    </AuthFrame>
   );
 }

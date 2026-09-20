@@ -214,6 +214,37 @@ App disponible en `http://localhost:3000`. Tras iniciar sesión:
 En el celular la navegación es una barra inferior fija (Proyectos, Nueva,
 Historial). En `md` y superior, la misma lista vive en una barra lateral.
 
+### PWA
+
+La app es instalable (manifest nativo de Next.js + service worker de assets
+estáticos). El service worker **no** se registra con `npm run dev`: hay que
+servir el build de producción.
+
+```bash
+cd frontend
+npm run build
+npm run start
+```
+
+Luego, en `http://localhost:3000`:
+
+| Navegador | Cómo instalar |
+| --- | --- |
+| Chrome / Edge (Android o escritorio) | Aparece **Instalar app** en el encabezado cuando el navegador dispara `beforeinstallprompt`. También sirve el icono de instalar de la barra de direcciones. |
+| Safari iOS | **Instalar app** abre la pista: Compartir → Añadir a pantalla de inicio. Hace falta el icono Apple (`apple-icon`) y `apple-mobile-web-app-capable`. |
+
+**Instalar app** sale en el encabezado de `/sign-in` y `/sign-up`, y también
+en el shell autenticado (barra lateral en escritorio, cabecera en móvil). Si
+la app ya está en `standalone`, el botón se oculta.
+
+Comprobaciones rápidas:
+
+- Manifest: `http://localhost:3000/manifest.webmanifest` (nombre, `theme_color` `#1a2332`, iconos 192 y 512).
+- Service worker: Application → Service Workers; cache `techchip-static-v1` con `/_next/static/*` e `/icons/*`.
+- No cachea HTML, sesiones de Clerk ni llamadas a FastAPI.
+- El flujo de producto (crear proyecto, agente, informe) exige una sesión de
+  Clerk. Sin ella, `/` redirige a `/sign-in`.
+
 ## Autenticación
 
 Solo empleados autenticados con Clerk pueden usar la aplicación. El frontend

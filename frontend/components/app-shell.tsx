@@ -5,6 +5,7 @@ import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { InstallAppButton } from "@/components/install-app";
 import { isNavActive, NAV_ITEMS } from "@/lib/nav";
 import { cn } from "cn";
 
@@ -39,7 +40,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
-        <div className="px-1 pt-4">
+        <div className="flex items-center gap-2 px-1 pt-4">
+          <InstallAppButton />
           <UserButton />
         </div>
       </aside>
@@ -50,7 +52,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             <p className="font-mono text-[11px] text-steel">TechChip · planta</p>
             <p className="text-sm font-medium text-ink">Estimaciones</p>
           </div>
-          <UserButton />
+          <div className="flex items-center gap-2">
+            <InstallAppButton />
+            <UserButton />
+          </div>
         </header>
 
         <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 pb-[calc(5.25rem+env(safe-area-inset-bottom))] md:px-8 md:py-8 md:pb-10">

@@ -9,19 +9,24 @@ import type { ReportFile } from "@/lib/api";
 
 export function DownloadReports({
   estimationId,
+  initialReports = [],
 }: {
   estimationId: string;
+  initialReports?: ReportFile[];
 }) {
-  const [reports, setReports] = useState<ReportFile[]>([]);
+  const [reports, setReports] = useState<ReportFile[]>(initialReports);
   const [pending, start] = useTransition();
   const [busy, setBusy] = useState<"pdf" | "docx" | null>(null);
+  const [generating, setGenerating] = useState(false);
 
   const download = (type: "pdf" | "docx") => {
     start(async () => {
       setBusy(type);
       try {
         let files = reports;
-        if (files.length === 0) {
+        const existing = files.find((item) => item.file_type === type);
+        if (!existing) {
+          setGenerating(true);
           const result = await generateReport(estimationId);
           if (!result.ok) {
             toast.error(result.error);
@@ -37,9 +42,15 @@ export function DownloadReports({
         }
         window.location.href = file.file_url;
       } finally {
+        setGenerating(false);
         setBusy(null);
       }
     });
+  };
+
+  const label = (type: "pdf" | "docx", idle: string) => {
+    if (busy !== type) return idle;
+    return generating ? `Generando ${type.toUpperCase()}…` : `Descargando ${type.toUpperCase()}…`;
   };
 
   return (
@@ -51,7 +62,7 @@ export function DownloadReports({
         disabled={pending}
         onClick={() => download("pdf")}
       >
-        {busy === "pdf" ? "Generando PDF…" : "Descargar PDF"}
+        {label("pdf", "Descargar PDF")}
       </Button>
       <Button
         type="button"
@@ -60,7 +71,7 @@ export function DownloadReports({
         disabled={pending}
         onClick={() => download("docx")}
       >
-        {busy === "docx" ? "Generando DOCX…" : "Descargar DOCX"}
+        {label("docx", "Descargar DOCX")}
       </Button>
     </div>
   );

@@ -77,7 +77,10 @@ export function EstimationResult({ estimation }: { estimation: EstimationDetail 
 
       <section>
         <h2 className="mb-3 text-sm font-medium text-ink">Informe</h2>
-        <DownloadReports estimationId={estimation.id} />
+        <DownloadReports
+          estimationId={estimation.id}
+          initialReports={estimation.reports}
+        />
       </section>
     </>
   );
