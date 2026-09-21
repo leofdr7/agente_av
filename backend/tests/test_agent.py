@@ -1,12 +1,16 @@
 """Orquestación del agente: despacho de tools con el motor real y Anthropic simulado."""
 
 import json
+import os
+import unicodedata
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
+import numpy as np
 import pytest
 
+from app.core.config import settings
 from app.models.agent import AgentRunRequest
 from app.models.linear_system import SolutionMethod, SystemClassification
 from app.services.agent import (
@@ -23,11 +27,12 @@ from app.services.agent import (
     AgentError,
     AgentRun,
     _initial_message,
+    get_anthropic_client,
     looks_like_numeric_solution,
     run_agent,
 )
 from app.services.linear_systems_engine import NEGATIVE_SOLUTION_COMPONENT
-from tests.fixtures import techchip
+from tests.fixtures import panaderia, techchip
 
 ESTIMATION_ID = "9c5f1b2a-1111-4c3d-9d5a-1c2b3a4d5e6f"
 EMPLOYEE_ID = UUID("3f6c1b1e-6c2c-4d8e-9d5a-1c2b3a4d5e6f")
@@ -501,4 +506,90 @@ def test_loop_rechaza_un_vector_x_sin_haber_resuelto() -> None:
     assert TOOL_RESOLVER_GAUSS in names
     assert response.final_response == ANALISIS
     assert response.result_json.cross_validation is not None
+
+
+# -- generalización: panadería, independiente de TechChip -------------------------
+
+TERMINOS_DEL_ENUNCIADO = ("harina", "horno", "pan de caja", "baguette", "bolillo")
+
+
+def _sin_acentos(texto: str) -> str:
+    normalizado = unicodedata.normalize("NFD", texto.lower())
+    return "".join(ch for ch in normalizado if unicodedata.category(ch) != "Mn")
+
+
+def _contiene(texto: str, termino: str) -> bool:
+    return _sin_acentos(termino) in _sin_acentos(texto)
+
+
+def test_panaderia_numpy_coincide_con_la_solucion_de_referencia() -> None:
+    """Resolución independiente del fixture, sin pasar por el modelo."""
+    solucion = np.linalg.solve(
+        np.array(panaderia.A, dtype=float),
+        np.array(panaderia.B, dtype=float),
+    )
+
+    assert solucion == pytest.approx(panaderia.X_ESPERADA, abs=1e-6)
+    assert len(techchip.A) != len(panaderia.A)
+    assert "[[" not in panaderia.PROBLEM_TEXT
+
+
+@pytest.mark.skipif(
+    os.environ.get("RUN_LIVE_AGENT") != "1",
+    reason="Corrida real contra Anthropic; ejecutar con RUN_LIVE_AGENT=1",
+)
+def test_panaderia_corrida_real_extrae_el_sistema_sin_vocabulario_techchip() -> None:
+    """Extrae el 3x3 del enunciado, lo resuelve y no arrastra TechChip ni el RAG vacío."""
+    if "example.supabase.co" in settings.supabase_url:
+        pytest.fail(
+            "SUPABASE_URL apunta al host de tests. Carga backend/.env en el "
+            "entorno antes de pytest para que buscar_conocimiento use el vault real."
+        )
+    if not settings.anthropic_api_key:
+        pytest.fail("Falta ANTHROPIC_API_KEY en el entorno.")
+    if settings.embedding_provider == "voyage" and not settings.voyage_api_key:
+        pytest.fail("Falta VOYAGE_API_KEY; buscar_conocimiento no puede embeber la consulta.")
+    if settings.embedding_provider == "openai" and not settings.openai_api_key:
+        pytest.fail("Falta OPENAI_API_KEY; buscar_conocimiento no puede embeber la consulta.")
+
+    response = run_agent(
+        AgentRunRequest(problem_text=panaderia.PROBLEM_TEXT, project_id=uuid4()),
+        EMPLOYEE_ID,
+        anthropic_client=get_anthropic_client(),
+        supabase=fake_supabase(),
+    )
+    trace = response.result_json
+
+    assert trace.A == panaderia.A, trace.A
+    assert trace.B == panaderia.B, trace.B
+    independiente = np.linalg.solve(
+        np.array(trace.A, dtype=float),
+        np.array(trace.B, dtype=float),
+    )
+    assert independiente == pytest.approx(panaderia.X_ESPERADA, abs=1e-6)
+    assert trace.cross_validation is not None
+    assert trace.cross_validation.solution == pytest.approx(panaderia.X_ESPERADA, abs=1e-6)
+
+    for termino in TERMINOS_DEL_ENUNCIADO:
+        assert _contiene(response.final_response, termino), response.final_response
+    for termino in panaderia.TERMINOS_PROHIBIDOS:
+        assert not _contiene(response.final_response, termino), response.final_response
+
+    consultas = [
+        record
+        for record in trace.tools
+        if record.name == TOOL_BUSCAR_CONOCIMIENTO
+    ]
+    assert consultas, "el agente no consultó la base de conocimiento"
+    # La consulta busca notas del proceso; no tiene que repetir cada pan.
+    # El enunciado ya pide eso, y los tres panes se exigen en la interpretación.
+    texto_consultas = "\n".join(str(record.input.get("query", "")) for record in consultas)
+    for termino in ("harina", "horno"):
+        assert _contiene(texto_consultas, termino), texto_consultas
+    for record in consultas:
+        assert record.is_error is False, record.output
+        assert record.output["resultados"] == [], record.output
+        consulta = str(record.input.get("query", ""))
+        for termino in panaderia.TERMINOS_PROHIBIDOS:
+            assert not _contiene(consulta, termino), consulta
 
