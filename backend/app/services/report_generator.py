@@ -16,6 +16,7 @@ from xml.sax.saxutils import escape
 
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -36,6 +37,18 @@ from app.services.agent import (
     TOOL_RESOLVER_MATRIZ_INVERSA,
 )
 from app.services.linear_systems_engine import NEGATIVE_SOLUTION_COMPONENT
+from app.services.markdown_blocks import (
+    Block,
+    CodeBlock,
+    Heading,
+    ListBlock,
+    Paragraph,
+    Span,
+    Table,
+    looks_numeric,
+    parse_markdown,
+    spans_text,
+)
 
 _APP_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = _APP_DIR / "templates"
@@ -44,6 +57,9 @@ LOGO_PATH = ASSETS_DIR / "logo_placeholder.png"
 
 COMPANY = "AgentA"
 NAVY = RGBColor(0x0F, 0x20, 0x40)
+# Mismos acentos que el frontend: cobre para el resultado, acero para lo secundario.
+COPPER = RGBColor(0xC4, 0x5C, 0x26)
+STEEL = RGBColor(0x5B, 0x65, 0x75)
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 PDF_MIME = "application/pdf"
 
@@ -52,6 +68,23 @@ METHOD_SPECS: tuple[tuple[str, str, str], ...] = (
     ("gauss_jordan", TOOL_RESOLVER_GAUSS_JORDAN, "Gauss-Jordan"),
     ("matrix_inverse", TOOL_RESOLVER_MATRIZ_INVERSA, "Matriz inversa"),
 )
+
+# Los tres métodos aplican las mismas operaciones de fila (el pivoteo solo mira A),
+# sobre matrices de trabajo distintas. Decirlo evita leerlos como pasos repetidos.
+MATRIX_CAPTIONS: dict[str, str] = {
+    "gauss": (
+        "Matriz ampliada [A|B] triangulada por debajo del pivote; X sale por "
+        "sustitución hacia atrás."
+    ),
+    "gauss_jordan": (
+        "Matriz ampliada [A|B] reducida hasta [I|X]: la última columna termina "
+        "siendo el vector solución."
+    ),
+    "matrix_inverse": (
+        "Matriz ampliada [A|I] reducida hasta [I|A⁻¹]: el bloque derecho termina "
+        "siendo la inversa."
+    ),
+}
 
 CLASSIFICATION_LABELS = {
     SystemClassification.COMPATIBLE_DETERMINADO.value: "compatible determinado",
@@ -98,6 +131,7 @@ class MethodSection:
     title: str
     ran: bool
     skip_reason: str | None
+    matrix_caption: str
     step_blocks: list[StepBlock]
     component_steps: list[dict[str, Any]]
     solution: list[float] | None
@@ -118,7 +152,8 @@ class ReportContext:
     problem_text: str
     generated_at: datetime
     company: str
-    executive_paragraphs: list[str]
+    executive_blocks: list[Block]
+    executive_html: str
     methods: list[MethodSection]
     method_titles: list[str]
     comparison_available: bool
@@ -180,18 +215,70 @@ def render_pdf(
         ) from exc
 
 
-def _matrix_html(matrix: list[list[float]] | None) -> str:
+def _matrix_html(matrix: list[list[float]] | None, split: int | None = None) -> str:
+    """Matriz como tabla; `split` dibuja la barra de ampliación tras esa columna."""
     if not matrix:
         return ""
     cols = max((len(row) for row in matrix), default=0)
-    parts = ["<table>"]
+    bar = split if split is not None and 0 < split < cols else None
+    parts = ['<table class="matrix">']
     for row in matrix:
         parts.append("<tr>")
         padded = list(row) + [None] * (cols - len(row))
-        for value in padded:
-            parts.append(f"<td>{escape(fmt_number(value))}</td>")
+        for index, value in enumerate(padded):
+            css = ' class="bar"' if index == bar else ""
+            parts.append(f"<td{css}>{escape(fmt_number(value))}</td>")
         parts.append("</tr>")
     parts.append("</table>")
+    return "".join(parts)
+
+
+def _spans_html(spans: list[Span]) -> str:
+    parts: list[str] = []
+    for span in spans:
+        text = escape(span.text)
+        if span.bold:
+            parts.append(f"<strong>{text}</strong>")
+        elif span.code:
+            parts.append(f"<code>{text}</code>")
+        else:
+            parts.append(text)
+    return "".join(parts)
+
+
+def markdown_html(blocks: list[Block]) -> str:
+    """Escribe los bloques del resumen como HTML; el texto va escapado."""
+    parts: list[str] = []
+    for block in blocks:
+        if isinstance(block, Heading):
+            # El resumen vive bajo un h2 del informe: sus encabezados arrancan en h3.
+            tag = f"h{min(block.level + 2, 6)}"
+            parts.append(f"<{tag}>{_spans_html(block.spans)}</{tag}>")
+        elif isinstance(block, Paragraph):
+            parts.append(f"<p>{_spans_html(block.spans)}</p>")
+        elif isinstance(block, ListBlock):
+            tag = "ol" if block.ordered else "ul"
+            items = "".join(f"<li>{_spans_html(item)}</li>" for item in block.items)
+            parts.append(f"<{tag}>{items}</{tag}>")
+        elif isinstance(block, CodeBlock):
+            parts.append(f"<pre>{escape(block.text)}</pre>")
+        elif isinstance(block, Table):
+            parts.append(_table_html(block))
+    return "".join(parts)
+
+
+def _table_html(block: Table) -> str:
+    parts = ["<table>", "<thead><tr>"]
+    for cell in block.header:
+        parts.append(f'<th class="label">{_spans_html(cell)}</th>')
+    parts.append("</tr></thead><tbody>")
+    for row in block.rows:
+        parts.append("<tr>")
+        for cell in row:
+            css = "" if looks_numeric(cell) else ' class="label"'
+            parts.append(f"<td{css}>{_spans_html(cell)}</td>")
+        parts.append("</tr>")
+    parts.append("</tbody></table>")
     return "".join(parts)
 
 
@@ -225,18 +312,92 @@ def _set_run_font(run, *, size: int, bold: bool = False, color: RGBColor | None 
         r_pr.rFonts.set(qn("w:eastAsia"), "Calibri")
 
 
-def _add_matrix_table(document: Document, matrix: list[list[float]]) -> None:
-    table = document.add_table(rows=len(matrix), cols=len(matrix[0]))
+def _set_cell_borders(cell, *, bar: bool) -> None:
+    """Borde de grilla; `bar` engrosa el lado izquierdo, la barra de ampliación."""
+    borders = OxmlElement("w:tcBorders")
+    for edge, size, color in (
+        ("top", "4", "C5CED9"),
+        ("left", "16" if bar else "4", "5B6575" if bar else "C5CED9"),
+        ("bottom", "4", "C5CED9"),
+        ("right", "4", "C5CED9"),
+    ):
+        element = OxmlElement(f"w:{edge}")
+        element.set(qn("w:val"), "single")
+        element.set(qn("w:sz"), size)
+        element.set(qn("w:space"), "0")
+        element.set(qn("w:color"), color)
+        borders.append(element)
+    cell._tc.get_or_add_tcPr().append(borders)
+
+
+def _add_matrix_table(
+    document: Document, matrix: list[list[float]], split: int | None = None
+) -> None:
+    """Tabla de la matriz de trabajo. `split` marca la primera columna ampliada."""
+    cols = len(matrix[0])
+    bar = split if split is not None and 0 < split < cols else None
+    table = document.add_table(rows=len(matrix), cols=cols)
     table.style = "Table Grid"
     for i, row in enumerate(matrix):
         for j, value in enumerate(row):
             cell = table.rows[i].cells[j]
             cell.text = fmt_number(value)
+            _set_cell_borders(cell, bar=j == bar)
             for paragraph in cell.paragraphs:
                 paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
                 for run in paragraph.runs:
                     run.font.size = Pt(8)
                     run.font.name = "Calibri"
+
+
+def _add_spans(paragraph, spans: list[Span], *, size: int = 10) -> None:
+    for span in spans:
+        run = paragraph.add_run(span.text)
+        _set_run_font(run, size=size, bold=span.bold)
+        if span.code:
+            run.font.name = "Consolas"
+
+
+def _add_markdown_table(document: Document, block: Table) -> None:
+    cols = max([len(block.header), *(len(row) for row in block.rows)] or [0])
+    if not cols:
+        return
+    table = document.add_table(rows=1 + len(block.rows), cols=cols)
+    table.style = "Table Grid"
+    for index, cell in enumerate(block.header[:cols]):
+        target = table.rows[0].cells[index]
+        target.text = ""
+        _add_spans(target.paragraphs[0], [Span(spans_text(cell), bold=True)], size=9)
+    for i, row in enumerate(block.rows, start=1):
+        for j, cell in enumerate(row[:cols]):
+            target = table.rows[i].cells[j]
+            target.text = ""
+            paragraph = target.paragraphs[0]
+            if looks_numeric(cell):
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            _add_spans(paragraph, cell, size=9)
+
+
+def _add_markdown_blocks(document: Document, blocks: list[Block]) -> None:
+    """Escribe el resumen del agente con formato de Word, no con los símbolos."""
+    for block in blocks:
+        if isinstance(block, Heading):
+            # El resumen es una sección de nivel 1; sus encabezados van debajo.
+            heading = document.add_heading(level=min(block.level + 1, 4))
+            _add_spans(heading, block.spans, size=12)
+        elif isinstance(block, Paragraph):
+            _add_spans(document.add_paragraph(), block.spans)
+        elif isinstance(block, ListBlock):
+            style = "List Number" if block.ordered else "List Bullet"
+            for item in block.items:
+                _add_spans(document.add_paragraph(style=style), item)
+        elif isinstance(block, CodeBlock):
+            paragraph = document.add_paragraph()
+            run = paragraph.add_run(block.text)
+            _set_run_font(run, size=9)
+            run.font.name = "Consolas"
+        elif isinstance(block, Table):
+            _add_markdown_table(document, block)
 
 
 def render_docx(ctx: ReportContext) -> bytes:
@@ -252,18 +413,17 @@ def render_docx(ctx: ReportContext) -> bytes:
     date_run = paragraph.add_run(
         f"\n{ctx.generated_at.strftime('%Y-%m-%d %H:%M UTC')}  ·  {ctx.estimation_id}"
     )
-    _set_run_font(date_run, size=8, color=RGBColor(0x5B, 0x65, 0x75))
+    _set_run_font(date_run, size=8, color=STEEL)
 
     title = document.add_heading(ctx.project_title, level=0)
     for run in title.runs:
         _set_run_font(run, size=22, bold=True)
     intro = document.add_paragraph(f"Enunciado: {ctx.problem_text}")
     for run in intro.runs:
-        _set_run_font(run, size=10, color=RGBColor(0x5B, 0x65, 0x75))
+        _set_run_font(run, size=10, color=STEEL)
 
     document.add_heading("Resumen ejecutivo", level=1)
-    for para in ctx.executive_paragraphs:
-        document.add_paragraph(para)
+    _add_markdown_blocks(document, ctx.executive_blocks)
 
     document.add_heading("Resolución multimétodo", level=1)
     document.add_paragraph(
@@ -276,13 +436,29 @@ def render_docx(ctx: ReportContext) -> bytes:
         if not method.ran:
             document.add_paragraph(method.skip_reason or "Este método no se ejecutó.")
             continue
+        if method.solution:
+            result = document.add_paragraph()
+            label = result.add_run("Vector solución  ")
+            _set_run_font(label, size=10, bold=True, color=COPPER)
+            value = result.add_run(f"X = ({_join_fmt(method.solution)})")
+            _set_run_font(value, size=10)
+        if method.matrix_caption:
+            caption = document.add_paragraph(method.matrix_caption)
+            for run in caption.runs:
+                _set_run_font(run, size=9, color=STEEL)
+        split = len(method.solution) if method.solution else None
+        for index, step in enumerate(method.step_blocks, start=1):
+            operation = document.add_paragraph()
+            number = operation.add_run(f"{index:02d}  ")
+            _set_run_font(number, size=9, color=STEEL)
+            symbolic = operation.add_run(step.description)
+            _set_run_font(symbolic, size=10, bold=True)
+            if step.matrix:
+                _add_matrix_table(document, step.matrix, split)
+            document.add_paragraph()
         if method.inverse_matrix:
             document.add_paragraph("Matriz inversa A⁻¹:")
             _add_matrix_table(document, method.inverse_matrix)
-        for step in method.step_blocks:
-            document.add_paragraph(step.description)
-            if step.matrix:
-                _add_matrix_table(document, step.matrix)
         if method.component_steps:
             document.add_paragraph("Despeje de las componentes de X:")
             for item in method.component_steps:
@@ -290,10 +466,6 @@ def render_docx(ctx: ReportContext) -> bytes:
                     f"{item['equation']} = {fmt_number(item['value'])}",
                     style="List Bullet",
                 )
-        if method.solution:
-            document.add_paragraph(
-                f"Vector solución X = ({_join_fmt(method.solution)})."
-            )
 
     document.add_heading("Tabla comparativa", level=1)
     if ctx.comparison_available and ctx.comparison_rows:
@@ -371,6 +543,7 @@ def _method_section(trace: AgentRunTrace, key: str, tool_name: str, title: str) 
             title=title,
             ran=False,
             skip_reason=reason,
+            matrix_caption="",
             step_blocks=[],
             component_steps=[],
             solution=None,
@@ -389,6 +562,7 @@ def _method_section(trace: AgentRunTrace, key: str, tool_name: str, title: str) 
             title=title,
             ran=False,
             skip_reason=reason,
+            matrix_caption="",
             step_blocks=[],
             component_steps=[],
             solution=None,
@@ -397,23 +571,27 @@ def _method_section(trace: AgentRunTrace, key: str, tool_name: str, title: str) 
         )
 
     steps = output.get("steps") or []
+    solution = output.get("solution")
+    # La barra de ampliación separa A de lo que se arrastra a su derecha: B en
+    # Gauss y Gauss-Jordan, la identidad que se vuelve A⁻¹ en el tercer método.
+    split = len(solution) if isinstance(solution, list) else None
     step_blocks = [
         StepBlock(
             description=str(step.get("description", "")),
             matrix=list(step.get("matrix_state") or []),
-            matrix_html=_matrix_html(step.get("matrix_state")),
+            matrix_html=_matrix_html(step.get("matrix_state"), split),
         )
         for step in steps
         if isinstance(step, dict)
     ]
     inverse = output.get("inverse_matrix")
-    solution = output.get("solution")
     components = output.get("component_steps") or []
     return MethodSection(
         key=key,
         title=title,
         ran=True,
         skip_reason=None,
+        matrix_caption=MATRIX_CAPTIONS.get(key, ""),
         step_blocks=step_blocks,
         component_steps=[item for item in components if isinstance(item, dict)],
         solution=list(solution) if isinstance(solution, list) else None,
@@ -458,10 +636,10 @@ def _project_title(row: dict[str, Any]) -> str:
     return text or "Estimación sin título"
 
 
-def _paragraphs(text: str, fallback: str) -> list[str]:
-    chunks = [part.strip() for part in text.replace("\r\n", "\n").split("\n\n")]
-    chunks = [part for part in chunks if part]
-    return chunks or [fallback]
+def _executive_blocks(text: str, fallback: str) -> list[Block]:
+    """Resumen del agente ya interpretado; si no dejó nada, un párrafo de aviso."""
+    blocks = parse_markdown(text) if text.strip() else []
+    return blocks or [Paragraph(spans=[Span(fallback)])]
 
 
 def _variable_label(trace: AgentRunTrace, index: int) -> str:
@@ -594,6 +772,10 @@ def build_report_context(row: dict[str, Any], *, generated_at: datetime | None =
     diagnosis = _extract_diagnosis(trace)
     available, rows, agreed, verdict = _comparison(trace, methods)
     conclusions, alert = _conclusions(trace, diagnosis, agreed)
+    executive = _executive_blocks(
+        trace.final_response,
+        "El agente no dejó un resumen ejecutivo en esta estimación.",
+    )
     diagnosis_label = ""
     if diagnosis is not None:
         diagnosis_label = CLASSIFICATION_LABELS.get(
@@ -606,10 +788,8 @@ def build_report_context(row: dict[str, Any], *, generated_at: datetime | None =
         problem_text=str(row.get("problem_text") or ""),
         generated_at=generated,
         company=COMPANY,
-        executive_paragraphs=_paragraphs(
-            trace.final_response,
-            "El agente no dejó un resumen ejecutivo en esta estimación.",
-        ),
+        executive_blocks=executive,
+        executive_html=markdown_html(executive),
         methods=methods,
         method_titles=[spec[2] for spec in METHOD_SPECS],
         comparison_available=available,

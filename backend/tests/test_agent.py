@@ -157,6 +157,25 @@ def test_system_prompt_no_impone_la_terminologia_de_un_caso_concreto() -> None:
     assert "TechChip" not in SYSTEM_PROMPT
 
 
+def test_system_prompt_pide_el_markdown_que_el_frontend_y_los_informes_renderizan() -> None:
+    formato = SYSTEM_PROMPT[SYSTEM_PROMPT.index("FORMATO DE LA RESPUESTA FINAL") :]
+
+    assert "Markdown" in formato
+    assert "`##`" in formato
+    assert "`**texto**`" in formato
+    assert "|---|" in formato
+
+
+def test_system_prompt_prohibe_el_latex_que_el_frontend_no_puede_renderizar() -> None:
+    formato = SYSTEM_PROMPT[SYSTEM_PROMPT.index("FORMATO DE LA RESPUESTA FINAL") :]
+
+    assert "No uses notación LaTeX" in formato
+    assert "$$...$$" in formato
+    assert r"\begin{pmatrix}" in formato
+    # La alternativa para matrices tiene que quedar dicha, no solo la prohibición.
+    assert "tabla Markdown o un bloque de código" in formato
+
+
 # -- despacho sobre el motor real --------------------------------------------------
 
 

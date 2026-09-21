@@ -41,7 +41,7 @@ from app.services.report_generator import (
     render_html,
     render_pdf,
 )
-from tests.fixtures import techchip
+from tests.fixtures import panaderia, techchip
 
 A_SMALL = [[2.0, 1.0], [1.0, 3.0]]
 B_SMALL = [4.0, 5.0]
@@ -289,6 +289,134 @@ def test_generate_reports_uploads_both_files_using_documented_pdf_mock() -> None
     assert all(isinstance(call.args[1], (bytes, bytearray)) for call in bucket.upload.call_args_list)
     assert any(b"%PDF" in call.args[1] for call in bucket.upload.call_args_list)
     assert any(call.args[1].startswith(b"PK") for call in bucket.upload.call_args_list)
+
+
+RESUMEN_MARKDOWN = """\
+## Diagnóstico
+
+El sistema es **compatible determinado**. det(A) = -10.
+
+## Plan de lotes
+
+| Pan | Lotes |
+| --- | --- |
+| pan de caja | 4 |
+| baguette | 3 |
+
+```
+x = (4, 3, 2)
+```
+
+La operación (0.5)*F1 no es una cursiva.
+"""
+
+
+def _executive_slice(document: Document) -> tuple[list[str], list]:
+    """Párrafos y tablas que pertenecen solo al resumen, antes de los métodos."""
+    texts: list[str] = []
+    started = False
+    for paragraph in document.paragraphs:
+        if paragraph.text == "Resumen ejecutivo":
+            started = True
+            continue
+        if paragraph.text == "Resolución multimétodo":
+            break
+        if started:
+            texts.append(paragraph.text)
+    # La primera tabla del documento es la del resumen; las de los pasos vienen después.
+    return texts, list(document.tables[:1])
+
+
+def test_el_resumen_markdown_no_se_imprime_con_simbolos_literales() -> None:
+    row = _estimation_row(
+        A=panaderia.A,
+        B=panaderia.B,
+        final_response=RESUMEN_MARKDOWN,
+        variable_names=panaderia.VARIABLE_NAMES,
+    )
+    ctx = build_report_context(row)
+    html = render_html(ctx)
+    resumen = html.split("<h2>Resolución multimétodo</h2>", 1)[0]
+
+    assert "<h4>Diagnóstico</h4>" in resumen
+    assert "<strong>compatible determinado</strong>" in resumen
+    assert "<th" in resumen and "pan de caja" in resumen
+    assert "<pre>" in resumen and "x = (4, 3, 2)" in resumen
+    assert "##" not in resumen
+    assert "**" not in resumen
+    assert "|---|" not in resumen
+    assert "(0.5)*F1" in resumen
+
+    document = Document(BytesIO(render_docx(ctx)))
+    texts, tables = _executive_slice(document)
+    joined = "\n".join(texts)
+    assert "Diagnóstico" in joined
+    assert "##" not in joined
+    assert "**" not in joined
+    assert "|---|" not in joined
+    assert "(0.5)*F1" in joined
+    assert tables and tables[0].rows[1].cells[0].text == "pan de caja"
+
+    bold = [
+        run.text
+        for paragraph in document.paragraphs
+        for run in paragraph.runs
+        if run.bold and "compatible determinado" in run.text
+    ]
+    assert bold
+
+
+def test_panaderia_gauss_jordan_y_la_inversa_no_comparten_la_matriz() -> None:
+    """Las operaciones de fila coinciden (solo dependen de A); el estado, no."""
+    row = _estimation_row(
+        A=panaderia.A,
+        B=panaderia.B,
+        final_response=RESUMEN_MARKDOWN,
+        variable_names=panaderia.VARIABLE_NAMES,
+        project_name="Panadería",
+    )
+    ctx = build_report_context(row)
+    jordan = ctx.methods[1]
+    inversa = ctx.methods[2]
+
+    assert jordan.ran and inversa.ran
+    assert [step.description for step in jordan.step_blocks] == [
+        step.description for step in inversa.step_blocks
+    ]
+    assert jordan.step_blocks and inversa.step_blocks
+    assert all(len(step.matrix[0]) == 4 for step in jordan.step_blocks)
+    assert all(len(step.matrix[0]) == 6 for step in inversa.step_blocks)
+    assert jordan.inverse_matrix is None
+    assert inversa.inverse_matrix and len(inversa.inverse_matrix[0]) == 3
+    assert not jordan.component_steps
+    assert inversa.component_steps
+    assert 'class="bar"' in jordan.step_blocks[0].matrix_html
+    assert 'class="bar"' in inversa.step_blocks[0].matrix_html
+
+    html = render_html(ctx)
+    jordan_html, inversa_html = html.split("<h3>Matriz inversa</h3>", 1)
+    jordan_html = jordan_html.split("<h3>Gauss-Jordan</h3>", 1)[1]
+    assert jordan_html.count("<td") > 0
+    # Una fila de [A|B] tiene 4 celdas; una de [A|I], 6.
+    assert "<td" in jordan_html and jordan_html.count("<td") % 4 == 0
+    inversa_steps = inversa_html.split("Matriz inversa A", 1)[0]
+    assert inversa_steps.count("<td") % 6 == 0
+
+    document = Document(BytesIO(render_docx(ctx)))
+    widths = [len(table.columns) for table in document.tables]
+    assert 4 in widths and 6 in widths
+    # La barra de ampliación es un borde izquierdo más grueso (sz 16) en la columna de B o de I.
+    barred = 0
+    for table in document.tables:
+        if len(table.columns) not in (4, 6):
+            continue
+        for cell in table.rows[0].cells:
+            borders = cell._tc.find(
+                "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tcPr"
+            )
+            if borders is not None and 'w:sz="16"' in borders.xml:
+                barred += 1
+    assert barred > 0
 
 
 def test_generate_reports_404_when_estimation_missing() -> None:

@@ -174,7 +174,7 @@ export function EstimationForm({ projects }: { projects: Project[] }) {
                   name="project_name"
                   required
                   maxLength={200}
-                  placeholder="Línea AI-Edge, turno noche"
+                  placeholder="Nombre del proyecto o lote a evaluar"
                   disabled={pending}
                   className={fieldControlClass}
                 />
@@ -204,7 +204,7 @@ export function EstimationForm({ projects }: { projects: Project[] }) {
                 inputMode="decimal"
                 value={formatBudgetDisplay(budget)}
                 onChange={(event) => setBudget(sanitizeBudgetInput(event.target.value))}
-                placeholder="120,000"
+                placeholder="Monto disponible, $"
                 disabled={pending}
                 aria-describedby="budget-help"
                 className="h-full min-w-0 flex-1 rounded-md border-0 bg-transparent px-0 font-mono shadow-none focus-visible:border-transparent focus-visible:ring-0 disabled:bg-transparent dark:bg-transparent"
@@ -225,7 +225,7 @@ export function EstimationForm({ projects }: { projects: Project[] }) {
               required
               minLength={8}
               rows={8}
-              placeholder="¿Qué plan de producción es viable con el inventario actual?"
+              placeholder="Describe el sistema: qué variables intervienen, qué restricciones tienes y qué necesitas resolver. AgentA extrae las ecuaciones automáticamente por ti..."
               disabled={pending}
               aria-describedby="problem-help"
               className="min-h-40 rounded-md bg-sheet focus-visible:border-copper focus-visible:ring-3 focus-visible:ring-copper/40"

@@ -5,8 +5,10 @@ Monorepo con backend FastAPI y frontend Next.js para estimaciones basadas en pre
 ## Estructura
 
 ```
-├── backend/     # FastAPI (Python 3.11+)
-├── frontend/    # Next.js 16 (App Router, TypeScript, Tailwind, shadcn/ui, Clerk)
+├── backend/          # FastAPI (Python 3.11+)
+├── frontend/         # Next.js 16 (App Router, TypeScript, Tailwind, shadcn/ui, Clerk)
+├── vault/            # Base de conocimiento del despliegue (vacía en el repo)
+├── vault-ejemplo/    # Notas de demostración; no se indexan en producción
 └── docker-compose.yml
 ```
 
@@ -132,10 +134,11 @@ expediente propio. `GET /api/v1/projects/{id}/estimations` y
 `GET /api/v1/estimations/{id}` devuelve el resultado, el proyecto y los informes
 ya generados.
 
-Búsqueda RAG sobre el vault indexado:
+Búsqueda RAG sobre el vault indexado. Con `vault/` vacío la respuesta es
+`results: []`; solo devuelve fragmentos si el despliegue cargó sus propias notas:
 
 ```bash
-curl "http://localhost:8000/api/v1/knowledge/search?q=resina+de+encapsulado&top_k=5" \
+curl "http://localhost:8000/api/v1/knowledge/search?q=termino+del+negocio&top_k=5" \
   -H "Authorization: Bearer $CLERK_TOKEN"
 ```
 
@@ -215,6 +218,31 @@ stack trace fuera de `DEBUG=true`. `POST /api/v1/agent/run` está limitado con
 slowapi (por defecto 10 estimaciones por empleado y hora;
 `ESTIMATION_RATE_LIMIT`). Un 429 se muestra en el frontend como tope horario,
 no como fallo genérico.
+
+## Base de conocimiento
+
+`vault/` es donde cada despliegue de AgentA agrega su propia base de conocimiento:
+terminología de sus recursos, normas internas y casos anteriores, en Markdown.
+En el repositorio solo está `vault/.gitkeep`. No viene precargada con el negocio
+de nadie.
+
+El pipeline de indexado recorre esa carpeta y actualiza `knowledge_chunks`:
+
+```bash
+cd backend
+python scripts/index_vault.py
+```
+
+Si el repositorio tiene configurado `.github/workflows/reindex-vault.yml`, un push
+que toque `vault/**` dispara el mismo proceso.
+
+Un vault sin ningún `.md` no borra los chunks ya guardados: así un path mal
+apuntado no vacía la base. Para retirar notas, el directorio indexado tiene que
+seguir teniendo al menos un Markdown; si no, hay que borrar esas filas aparte.
+
+`vault-ejemplo/` guarda el caso ficticio TechChip (`recursos.md`, `productos.md`).
+Es contenido de ejemplo para probar el pipeline de RAG, no para uso en producción,
+y ni el indexador por defecto ni el workflow lo recorren.
 
 ## Frontend
 

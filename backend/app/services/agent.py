@@ -119,6 +119,20 @@ Redacta en español un análisis listo para convertirse en informe, con:
   que corresponda según el orden de prioridad de arriba;
 - el resultado de la validación cruzada y del error de sustitución ‖AX-B‖;
 - la conclusión: si el escenario es alcanzable o qué restricción lo bloquea.
+
+FORMATO DE LA RESPUESTA FINAL
+El texto se renderiza como Markdown (GitHub Flavored Markdown), en el frontend y en
+los informes PDF/DOCX. Escribe solo el subconjunto que ambos entienden:
+- encabezados con `##` y `###` para separar las secciones del análisis;
+- `**texto**` para las negritas;
+- tablas Markdown normales, con la fila de guiones `|---|`, para comparar métodos o
+  etiquetar las componentes de X;
+- listas con `-`.
+
+No uses notación LaTeX: nada de `$$...$$`, `$...$` ni `\\begin{pmatrix}`. No hay
+renderizador de fórmulas, así que ese texto aparecería roto. Para mostrar una matriz
+o un vector, usa una tabla Markdown o un bloque de código con ``` y las columnas
+alineadas con espacios.
 """
 
 _SYSTEM_INPUT_SCHEMA: dict[str, Any] = {

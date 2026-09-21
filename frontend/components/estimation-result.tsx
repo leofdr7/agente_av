@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { CalculationSteps } from "@/components/calculation-steps";
 import { DownloadReports } from "@/components/download-reports";
+import { MarkdownSummary } from "@/components/markdown-summary";
 import { PageHeader, Sheet } from "@/components/page-header";
 import { StatusDot } from "@/components/status-dot";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +20,6 @@ export function EstimationResult({ estimation }: { estimation: EstimationDetail 
   const summary =
     estimation.result_json?.final_response.trim() ||
     "El agente no dejó un resumen ejecutivo en esta estimación.";
-  const paragraphs = summary.split(/\n\n+/).filter(Boolean);
   const alert = runAlert(estimation.result_json);
 
   return (
@@ -72,18 +72,14 @@ export function EstimationResult({ estimation }: { estimation: EstimationDetail 
             </Badge>
           ) : null}
         </h2>
-        <div
+        <MarkdownSummary
           className={cn(
-            "space-y-3 border-l-[3px] pl-3",
+            "border-l-[3px] pl-4",
             alert ? "border-destructive" : "border-copper",
           )}
         >
-          {paragraphs.map((paragraph) => (
-            <p key={paragraph.slice(0, 24)} className="max-w-prose text-ink">
-              {paragraph}
-            </p>
-          ))}
-        </div>
+          {summary}
+        </MarkdownSummary>
       </section>
 
       <section className="mb-8">

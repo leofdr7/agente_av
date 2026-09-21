@@ -16,6 +16,7 @@
       html, body {
         font-family: "DejaVu Sans", "Liberation Sans", sans-serif;
         color: #1a2332;
+        background: #fff;
         font-size: 10.5pt;
         line-height: 1.45;
       }
@@ -96,17 +97,79 @@
       }
       td.label, th.label { text-align: left; }
       .step {
-        margin: 10px 0 14px 0;
+        margin: 12px 0 18px 0;
         page-break-inside: avoid;
       }
       .step .desc {
+        font-size: 10pt;
+        font-weight: 600;
+        margin-bottom: 5px;
+      }
+      .step .desc .index {
         font-family: "DejaVu Sans Mono", "Liberation Mono", monospace;
-        font-size: 9pt;
-        margin-bottom: 4px;
+        font-size: 8.5pt;
+        font-weight: 400;
+        color: #5b6575;
+        margin-right: 8px;
       }
       .equation {
         font-family: "DejaVu Sans Mono", "Liberation Mono", monospace;
         font-size: 9.5pt;
+      }
+      /* Barra de ampliación: separa A de B, o de la identidad que se vuelve A⁻¹. */
+      table.matrix td.bar {
+        border-left: 2px solid #5b6575;
+      }
+      .result {
+        border-left: 3px solid #c45c26;
+        padding: 4px 0 4px 10px;
+        margin: 10px 0 12px 0;
+      }
+      .result .result-label {
+        font-size: 8.5pt;
+        color: #5b6575;
+      }
+      /* Resumen ejecutivo: Markdown del agente, con su propia jerarquía interna. */
+      .summary h3 {
+        font-size: 11.5pt;
+        color: #0f2040;
+        margin: 14px 0 6px 0;
+      }
+      .summary h4 {
+        font-size: 10.5pt;
+        color: #1e5a8c;
+        margin: 12px 0 4px 0;
+      }
+      .summary h5 {
+        font-size: 10pt;
+        color: #5b6575;
+        margin: 10px 0 4px 0;
+      }
+      .summary > *:first-child {
+        margin-top: 0;
+      }
+      .summary ul,
+      .summary ol {
+        margin: 0 0 8px 0;
+        padding-left: 18px;
+      }
+      .summary li {
+        margin-bottom: 2px;
+      }
+      .summary th,
+      .summary td {
+        font-size: 9pt;
+      }
+      .summary code,
+      .summary pre {
+        font-family: "DejaVu Sans Mono", "Liberation Mono", monospace;
+        font-size: 9pt;
+      }
+      .summary pre {
+        background: #f1f3f6;
+        padding: 6px 8px;
+        margin: 8px 0;
+        white-space: pre-wrap;
       }
     </style>
   </head>
@@ -127,9 +190,7 @@
     <p class="muted">Enunciado: {{ ctx.problem_text }}</p>
 
     <h2>Resumen ejecutivo</h2>
-    {% for para in ctx.executive_paragraphs %}
-    <p>{{ para }}</p>
-    {% endfor %}
+    <div class="summary">{{ ctx.executive_html | safe }}</div>
 
     <h2>Resolución multimétodo</h2>
     <p>
@@ -143,16 +204,25 @@
     {% if not method.ran %}
     <div class="alert">{{ method.skip_reason }}</div>
     {% else %}
+      {% if method.solution %}
+      <div class="result">
+        <div class="result-label">Vector solución</div>
+        <div class="equation">X = ({{ method.solution | join_fmt }})</div>
+      </div>
+      {% endif %}
+      {% if method.matrix_caption %}
+      <p class="muted">{{ method.matrix_caption }}</p>
+      {% endif %}
+      {% for step in method.step_blocks %}
+      <div class="step">
+        <div class="desc"><span class="index">{{ "%02d" | format(loop.index) }}</span>{{ step.description }}</div>
+        {{ step.matrix_html | safe }}
+      </div>
+      {% endfor %}
       {% if method.inverse_matrix %}
       <p>Matriz inversa A<sup>−1</sup>:</p>
       {{ method.inverse_html | safe }}
       {% endif %}
-      {% for step in method.step_blocks %}
-      <div class="step">
-        <div class="desc">{{ step.description }}</div>
-        {{ step.matrix_html | safe }}
-      </div>
-      {% endfor %}
       {% if method.component_steps %}
       <p>Despeje de las componentes de X:</p>
       <ul>
@@ -160,9 +230,6 @@
         <li class="equation">{{ item.equation }} = {{ item.value | fmt }}</li>
         {% endfor %}
       </ul>
-      {% endif %}
-      {% if method.solution %}
-      <p>Vector solución X = ({{ method.solution | join_fmt }}).</p>
       {% endif %}
     {% endif %}
     {% endfor %}
