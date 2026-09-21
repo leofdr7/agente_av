@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     reports_bucket: str = "reports"
     reports_signed_url_ttl_seconds: int = 604800
 
+    # Rate limit de POST /api/v1/agent/run, por empleado (slowapi, ventana móvil).
+    rate_limit_enabled: bool = True
+    estimation_rate_limit: str = "10/hour"
+
     @field_validator(
         "voyage_api_key",
         "openai_api_key",

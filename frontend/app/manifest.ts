@@ -2,10 +2,10 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Estimaciones TechChip",
-    short_name: "Estimaciones",
+    name: "AgentA",
+    short_name: "AgentA",
     description:
-      "Órdenes de estimación de álgebra vectorial para la planta TechChip Systems.",
+      "Órdenes de estimación de álgebra vectorial para AgentA.",
     start_url: "/",
     scope: "/",
     id: "/",

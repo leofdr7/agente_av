@@ -1,4 +1,4 @@
-const CACHE_NAME = "techchip-static-v1";
+const CACHE_NAME = "agenta-static-v1";
 
 const PRECACHE_URLS = [
   "/icons/icon-48.png",

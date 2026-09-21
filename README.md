@@ -105,10 +105,11 @@ curl -X POST http://localhost:8000/api/v1/agent/run \
 coeficientes del enunciado. `variable_names` (líneas de producto, por columna) y
 `resource_names` (recursos, por fila) alimentan la interpretación semántica.
 
-Cada corrida se registra en `estimations`: el enunciado, el `project_id`, el
-empleado que la pidió y un `result_json` con la matriz y el vector usados, la traza
-de cada herramienta con sus argumentos y su salida, la validación cruzada y la
-respuesta final del agente.
+Cada corrida se registra en `estimations` (enunciado, `project_id`, empleado y
+`result_json` con la traza) y en `audit_logs` (empleado, proyecto, timestamp y
+el resumen de tools invocadas), para poder reconstruir cómo se llegó a un
+resultado. El loop rechaza un vector X si el modelo no llamó antes a
+`diagnosticar_sistema` o a los solvers del motor.
 
 ### Proyectos y lecturas de estimaciones
 
@@ -130,6 +131,13 @@ expediente propio. `GET /api/v1/projects/{id}/estimations` y
 `GET /api/v1/estimations` listan el historial (sin la traza completa).
 `GET /api/v1/estimations/{id}` devuelve el resultado, el proyecto y los informes
 ya generados.
+
+Búsqueda RAG sobre el vault indexado:
+
+```bash
+curl "http://localhost:8000/api/v1/knowledge/search?q=resina+de+encapsulado&top_k=5" \
+  -H "Authorization: Bearer $CLERK_TOKEN"
+```
 
 ### Informes PDF/DOCX
 
@@ -188,9 +196,25 @@ cd backend
 pytest
 ```
 
-Los tests del motor usan el caso TechChip Systems S.A. definido en
+Los tests del motor y del agente usan el caso TechChip Systems S.A. definido en
 `tests/fixtures/techchip.py`. El vector de disponibilidades activo se controla
-con la constante `DATASET_B`.
+con la constante `DATASET_B`. A nivel de agente (LLM simulado, motor real) se
+reproducen los cuatro escenarios de estrés: plan base X=(15,20,25,10,15,20),
+error de sustitución, escasez de resina de encapsulado (B3=100) y sistema
+degenerado F6=2·F1.
+
+Hay tests de integración HTTP (con mocks de Supabase) para crear una
+estimación, generar el informe PDF/DOCX y buscar en el RAG. El rate limit de
+estimaciones está desactivado en pytest (`RATE_LIMIT_ENABLED=false`) salvo en
+`test_rate_limit.py`.
+
+### Confiabilidad
+
+Las excepciones no controladas responden JSON `{error, message, detail}` sin
+stack trace fuera de `DEBUG=true`. `POST /api/v1/agent/run` está limitado con
+slowapi (por defecto 10 estimaciones por empleado y hora;
+`ESTIMATION_RATE_LIMIT`). Un 429 se muestra en el frontend como tope horario,
+no como fallo genérico.
 
 ## Frontend
 
@@ -240,7 +264,7 @@ la app ya está en `standalone`, el botón se oculta.
 Comprobaciones rápidas:
 
 - Manifest: `http://localhost:3000/manifest.webmanifest` (nombre, `theme_color` `#1a2332`, iconos 192 y 512).
-- Service worker: Application → Service Workers; cache `techchip-static-v1` con `/_next/static/*` e `/icons/*`.
+- Service worker: Application → Service Workers; cache `agenta-static-v1` con `/_next/static/*` e `/icons/*`.
 - No cachea HTML, sesiones de Clerk ni llamadas a FastAPI.
 - El flujo de producto (crear proyecto, agente, informe) exige una sesión de
   Clerk. Sin ella, `/` redirige a `/sign-in`.
@@ -275,6 +299,8 @@ Backend (`backend/.env`, plantilla en `backend/.env.example`):
 | `ANTHROPIC_MODEL` | Opcional. Modelo del orquestador; por defecto `claude-sonnet-5`. |
 | `REPORTS_BUCKET` | Bucket privado de Supabase Storage para los informes. Por defecto `reports`. Debe existir como campo de `Settings`: una variable extra en `.env` que no esté declarada hace fallar el arranque. |
 | `REPORTS_SIGNED_URL_TTL_SECONDS` | Caducidad de las URLs firmadas de descarga, en segundos. Por defecto `604800` (7 días). |
+| `RATE_LIMIT_ENABLED` | Activa el tope de estimaciones por empleado. Por defecto `true`. |
+| `ESTIMATION_RATE_LIMIT` | Ventana de slowapi para `POST /api/v1/agent/run`. Por defecto `10/hour`. |
 
 El backend no necesita `CLERK_SECRET_KEY`: verifica los tokens localmente con las
 claves públicas del JWKS.

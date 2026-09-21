@@ -106,6 +106,16 @@ export class ApiError extends Error {
   }
 }
 
+const STATUS_HINTS: Record<number, string> = {
+  401: "Tu sesión caducó. Vuelve a iniciar sesión.",
+  403: "No tienes permiso para esta operación.",
+  404: "No se encontró lo que pediste.",
+  409: "Todavía no hay un resultado para generar el informe.",
+  429: "Has alcanzado el límite de estimaciones de esta hora. Espera un rato para no disparar costos de la API.",
+  500: "No se pudo completar la operación. Si se generó una estimación, queda en el historial.",
+  503: "El servicio no está disponible ahora. Reintenta en unos minutos.",
+};
+
 export function messageFromDetail(detail: unknown, status?: number): string {
   if (typeof detail === "string" && detail.trim()) {
     return detail;
@@ -121,16 +131,35 @@ export function messageFromDetail(detail: unknown, status?: number): string {
     const joined = parts.filter(Boolean).join(" ");
     if (joined) return joined;
   }
-  if (detail && typeof detail === "object" && "message" in detail) {
-    const message = (detail as { message: unknown }).message;
-    if (typeof message === "string" && message.trim()) return message;
+  if (detail && typeof detail === "object") {
+    const record = detail as { message?: unknown; detail?: unknown };
+    if (typeof record.message === "string" && record.message.trim()) {
+      return record.message;
+    }
+    if (record.detail !== undefined && record.detail !== detail) {
+      return messageFromDetail(record.detail, status);
+    }
+  }
+  if (status && STATUS_HINTS[status]) {
+    return STATUS_HINTS[status];
   }
   return status ? `Error HTTP ${status}` : "Error inesperado.";
 }
 
 export function formatApiError(error: unknown): string {
   if (error instanceof ApiError) {
-    return error.message;
+    const hint = STATUS_HINTS[error.status];
+    if (error.status === 429 && hint) {
+      return hint;
+    }
+    const backend = error.message.trim();
+    if (backend && backend !== `Error HTTP ${error.status}`) {
+      return backend;
+    }
+    return hint ?? backend;
+  }
+  if (error instanceof TypeError) {
+    return "No se pudo contactar al backend. ¿Está uvicorn en marcha?";
   }
   if (error instanceof Error && error.message.trim()) {
     return error.message;
@@ -172,8 +201,11 @@ export async function apiFetch<T>(
   if (!response.ok) {
     let detail: unknown = response.statusText;
     try {
-      const payload = (await response.json()) as { detail?: unknown };
-      detail = payload.detail ?? payload;
+      const payload = (await response.json()) as {
+        message?: unknown;
+        detail?: unknown;
+      };
+      detail = payload.message ?? payload.detail ?? payload;
     } catch {
       // Sin cuerpo JSON: se conserva el statusText.
     }

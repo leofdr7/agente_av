@@ -10,6 +10,7 @@ modelo no llame a `diagnosticar_sistema`: un sistema singular nunca llega al sol
 """
 
 import json
+import re
 from collections.abc import Callable, Sequence
 from typing import Any
 from uuid import UUID
@@ -26,6 +27,7 @@ from app.models.agent import (
     AgentRunTrace,
     ToolCallRecord,
 )
+from app.services.audit import AuditLogError, record_estimation_audit
 from app.models.linear_system import LinearSystemInput, MethodSolution, SolutionMethod
 from app.services.linear_systems_engine import (
     MethodInconsistencyError,
@@ -52,8 +54,8 @@ TOOL_RESOLVER_GAUSS_JORDAN = "resolver_por_gauss_jordan"
 TOOL_RESOLVER_MATRIZ_INVERSA = "resolver_por_matriz_inversa"
 
 SYSTEM_PROMPT = """\
-Eres el agente de estimaciones de una planta de manufactura (caso TechChip Systems
-S.A., módulos de IA). Tu trabajo es interpretar, no calcular.
+Eres el agente de estimaciones de AgentA, una planta de manufactura (módulos de IA).
+Tu trabajo es interpretar, no calcular.
 
 REGLAS ABSOLUTAS
 1. NUNCA resuelvas el sistema de ecuaciones AX=B por tu cuenta. Nunca inventes,
@@ -195,6 +197,32 @@ _SOLVERS: dict[str, Callable[[LinearSystemInput], MethodSolution]] = {
     TOOL_RESOLVER_GAUSS_JORDAN: solve_gauss_jordan,
     TOOL_RESOLVER_MATRIZ_INVERSA: solve_matrix_inverse,
 }
+
+RESOLUTION_TOOLS = frozenset(_SOLVERS)
+PROTOCOL_DIAGNOSE_FIRST = (
+    "Protocolo del agente: debes llamar primero a `diagnosticar_sistema` "
+    "antes de cualquier herramienta de resolución."
+)
+PROTOCOL_DIAGNOSE_BEFORE_FINISH = (
+    "Antes de concluir debes llamar a `diagnosticar_sistema`. "
+    "No ofrezcas un análisis ni un vector X sin ese diagnóstico."
+)
+PROTOCOL_SOLVE_BEFORE_NUMBERS = (
+    "No puedes presentar un resultado numérico sin haber llamado a las "
+    "herramientas de resolución del motor (`resolver_por_gauss`, "
+    "`resolver_por_gauss_jordan`, `resolver_por_matriz_inversa`)."
+)
+PROTOCOL_NO_X_WHEN_SINGULAR = (
+    "El sistema es singular: no ofrezcas ningún vector solución. "
+    "Explica el diagnóstico en lenguaje de negocio."
+)
+
+# X=(15,20,25) o x1=15: un modelo que "calcula" a mano.
+_NUMERIC_VECTOR = re.compile(
+    r"(?:X\s*=\s*)?(?:\[|\()?\s*-?\d+(?:[.,]\d+)?(?:\s*,\s*-?\d+(?:[.,]\d+)?){2,}\s*(?:\]|\))?",
+    re.IGNORECASE,
+)
+_NAMED_COMPONENT = re.compile(r"\bx\s*[1-6]\s*=\s*-?\d", re.IGNORECASE)
 
 
 class AgentError(Exception):
@@ -463,6 +491,42 @@ def _final_text(blocks: Sequence[Any]) -> str:
     )
 
 
+def looks_like_numeric_solution(text: str) -> bool:
+    """True si el texto parece un vector X o un despeje x1=… inventado por el modelo."""
+    if _NAMED_COMPONENT.search(text):
+        return True
+    return _NUMERIC_VECTOR.search(text) is not None
+
+
+def _successful_diagnosis(run: AgentRun) -> dict[str, Any] | None:
+    for record in reversed(run.tools):
+        if record.name == TOOL_DIAGNOSTICAR_SISTEMA and not record.is_error:
+            return record.output if isinstance(record.output, dict) else None
+    return None
+
+
+def _has_resolved(run: AgentRun) -> bool:
+    return any(
+        record.name in RESOLUTION_TOOLS and not record.is_error for record in run.tools
+    )
+
+
+def protocol_reminder(run: AgentRun, final_text: str) -> str | None:
+    """Si el modelo viola el protocolo, el texto a devolverle; None si la corrida es válida."""
+    diagnosis = _successful_diagnosis(run)
+    if diagnosis is None:
+        return PROTOCOL_DIAGNOSE_BEFORE_FINISH
+
+    is_singular = bool(diagnosis.get("is_singular"))
+    numeric = looks_like_numeric_solution(final_text)
+
+    if is_singular and numeric:
+        return PROTOCOL_NO_X_WHEN_SINGULAR
+    if not is_singular and numeric and not _has_resolved(run):
+        return PROTOCOL_SOLVE_BEFORE_NUMBERS
+    return None
+
+
 def _persist(
     client: Client, request: AgentRunRequest, requested_by: UUID, trace: AgentRunTrace
 ) -> UUID:
@@ -480,7 +544,18 @@ def _persist(
     )
     if not result.data:
         raise AgentError("No se pudo registrar la estimación en Supabase.")
-    return UUID(str(result.data[0]["id"]))
+    estimation_id = UUID(str(result.data[0]["id"]))
+    try:
+        record_estimation_audit(
+            client,
+            employee_id=requested_by,
+            project_id=request.project_id,
+            estimation_id=estimation_id,
+            tool_names=[record.name for record in trace.tools],
+        )
+    except AuditLogError as exc:
+        raise AgentError(str(exc)) from exc
+    return estimation_id
 
 
 def run_agent(
@@ -518,14 +593,23 @@ def run_agent(
         )
 
         if response.stop_reason != "tool_use":
-            final_response = _final_text(blocks)
+            candidate = _final_text(blocks)
+            reminder = protocol_reminder(run, candidate)
+            if reminder is not None:
+                messages.append({"role": "user", "content": reminder})
+                continue
+            final_response = candidate
             break
 
         results: list[dict[str, Any]] = []
         for block in blocks:
             if getattr(block, "type", None) != "tool_use":
                 continue
-            output, is_error = run.execute(block.name, block.input)
+            diagnosed = _successful_diagnosis(run) is not None
+            if block.name in RESOLUTION_TOOLS and not diagnosed:
+                output, is_error = {"error": PROTOCOL_DIAGNOSE_FIRST}, True
+            else:
+                output, is_error = run.execute(block.name, block.input)
             run.tools.append(
                 ToolCallRecord(
                     name=block.name,

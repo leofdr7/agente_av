@@ -7,7 +7,7 @@ export function AuthFrame({ children }: { children: ReactNode }) {
     <div className="shop-grid flex min-h-dvh flex-col">
       <header className="flex items-center justify-between gap-3 border-b border-ink/10 bg-sheet/80 px-4 py-3 backdrop-blur-sm">
         <div>
-          <p className="font-mono text-[11px] text-steel">TechChip · planta</p>
+          <p className="font-mono text-[11px] text-steel">AgentA · planta</p>
           <p className="text-sm font-medium text-ink">Estimaciones</p>
         </div>
         <InstallAppButton />

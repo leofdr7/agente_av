@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { EmptyState } from "@/components/empty-state";
+import { ErrorNotice } from "@/components/error-notice";
 import { EstimationList } from "@/components/estimation-list";
 import { PageHeader } from "@/components/page-header";
 import { StatusDot } from "@/components/status-dot";
@@ -37,9 +38,9 @@ export default async function ProyectoPage({
 
   if (loadError || !project) {
     return (
-      <p className="text-sm text-destructive" role="alert">
+      <ErrorNotice title="No se pudo abrir el proyecto">
         {loadError ?? "No se pudo cargar el proyecto."}
-      </p>
+      </ErrorNotice>
     );
   }
 
@@ -66,9 +67,9 @@ export default async function ProyectoPage({
       </PageHeader>
 
       {listError ? (
-        <p className="text-sm text-destructive" role="alert">
+        <ErrorNotice title="No se pudieron cargar las estimaciones">
           {listError}
-        </p>
+        </ErrorNotice>
       ) : estimations.length === 0 ? (
         <EmptyState
           title="Este proyecto no tiene estimaciones"

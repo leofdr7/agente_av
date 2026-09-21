@@ -15,3 +15,10 @@ class KnowledgeHit(BaseModel):
     content: str
     metadata: dict[str, Any] = Field(default_factory=dict)
     similarity: float
+
+
+class KnowledgeSearchResponse(BaseModel):
+    """Respuesta de GET /api/v1/knowledge/search."""
+
+    query: str
+    results: list[KnowledgeHit]

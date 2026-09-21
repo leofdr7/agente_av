@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 
+import { ErrorNotice } from "@/components/error-notice";
 import { EstimationResult } from "@/components/estimation-result";
 import { ApiError, formatApiError, type EstimationDetail } from "@/lib/api";
 import { serverApiFetch } from "@/lib/api.server";
@@ -28,9 +29,9 @@ export default async function EstimacionPage({
 
   if (error || !estimation) {
     return (
-      <p className="text-sm text-destructive" role="alert">
+      <ErrorNotice title="No se pudo abrir la estimación">
         {error ?? "No se pudo cargar la estimación."}
-      </p>
+      </ErrorNotice>
     );
   }
 

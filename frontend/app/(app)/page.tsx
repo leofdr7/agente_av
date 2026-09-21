@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { EmptyState } from "@/components/empty-state";
+import { ErrorNotice } from "@/components/error-notice";
 import { PageHeader } from "@/components/page-header";
 import { ProjectList } from "@/components/project-list";
 import { buttonVariants } from "@/components/ui/button";
@@ -31,9 +32,9 @@ export default async function DashboardPage() {
       </PageHeader>
 
       {error ? (
-        <p className="text-sm text-destructive" role="alert">
+        <ErrorNotice title="No se pudieron cargar los proyectos">
           {error}
-        </p>
+        </ErrorNotice>
       ) : projects.length === 0 ? (
         <EmptyState
           title="Todavía no hay proyectos"

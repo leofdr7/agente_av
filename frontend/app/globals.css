@@ -93,6 +93,45 @@
   --sidebar-ring: var(--copper);
 }
 
+.dark {
+  --paper: #121820;
+  --sheet: #1c2633;
+  --ink: #e8eef4;
+  --copper: #e08a4a;
+  --steel: #a7b4c2;
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--sheet);
+  --card-foreground: var(--ink);
+  --popover: var(--sheet);
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: #121820;
+  --secondary: #2a3544;
+  --secondary-foreground: var(--ink);
+  --muted: #2a3544;
+  --muted-foreground: var(--steel);
+  --accent: #3a2c22;
+  --accent-foreground: var(--ink);
+  --destructive: #f0715a;
+  --border: color-mix(in srgb, var(--ink) 16%, transparent);
+  --input: color-mix(in srgb, var(--ink) 22%, transparent);
+  --ring: var(--copper);
+  --chart-1: var(--copper);
+  --chart-2: var(--steel);
+  --chart-3: var(--ink);
+  --chart-4: #8a93a0;
+  --chart-5: #3a4554;
+  --sidebar: #161e28;
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--copper);
+  --sidebar-primary-foreground: #fff8f3;
+  --sidebar-accent: #243040;
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: color-mix(in srgb, var(--ink) 14%, transparent);
+  --sidebar-ring: var(--copper);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

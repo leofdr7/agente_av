@@ -41,7 +41,7 @@ TEMPLATES_DIR = _APP_DIR / "templates"
 ASSETS_DIR = _APP_DIR / "assets"
 LOGO_PATH = ASSETS_DIR / "logo_placeholder.png"
 
-COMPANY = "TechChip Systems S.A."
+COMPANY = "AgentA"
 NAVY = RGBColor(0x0F, 0x20, 0x40)
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 PDF_MIME = "application/pdf"

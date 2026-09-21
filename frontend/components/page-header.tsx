@@ -13,14 +13,16 @@ export function PageHeader({
   children?: ReactNode;
 }) {
   return (
-    <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <header className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div className="border-l-[3px] border-copper pl-3">
         {eyebrow ? (
           <div className="font-mono text-[11px] text-steel">{eyebrow}</div>
         ) : null}
         <h1 className="text-2xl font-medium tracking-tight text-ink">{title}</h1>
         {description ? (
-          <p className="mt-1 max-w-prose text-sm text-steel">{description}</p>
+          <p className="mt-3 max-w-prose text-sm font-normal leading-relaxed text-steel">
+            {description}
+          </p>
         ) : null}
       </div>
       {children ? <div className="sm:pb-0.5">{children}</div> : null}

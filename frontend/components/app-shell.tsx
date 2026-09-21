@@ -16,7 +16,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="shop-grid min-h-dvh">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-56 flex-col border-r border-ink/10 bg-sidebar/90 px-3 py-5 backdrop-blur-sm md:flex">
         <p className="px-2 font-mono text-[11px] tracking-wide text-steel">
-          TechChip · planta
+          AgentA · planta
         </p>
         <p className="mt-1 px-2 text-sm font-medium text-ink">Estimaciones</p>
         <nav className="mt-8 flex flex-1 flex-col gap-1" aria-label="Principal">
@@ -49,7 +49,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex min-h-dvh flex-col md:pl-56">
         <header className="flex items-center justify-between gap-3 border-b border-ink/10 bg-sheet/80 px-4 py-3 backdrop-blur-sm md:hidden">
           <div>
-            <p className="font-mono text-[11px] text-steel">TechChip · planta</p>
+            <p className="font-mono text-[11px] text-steel">AgentA · planta</p>
             <p className="text-sm font-medium text-ink">Estimaciones</p>
           </div>
           <div className="flex items-center gap-2">

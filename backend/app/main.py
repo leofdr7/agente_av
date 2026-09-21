@@ -5,12 +5,17 @@ from app.api.agent import router as agent_router
 from app.api.deps import get_current_employee
 from app.api.estimations import router as estimations_router
 from app.api.health import router as health_router
+from app.api.knowledge import router as knowledge_router
 from app.api.linear_systems import router as linear_systems_router
 from app.api.me import router as me_router
 from app.api.projects import router as projects_router
 from app.core.config import settings
+from app.core.errors import register_exception_handlers
+from app.core.rate_limit import limiter
 
 app = FastAPI(title=settings.app_name, debug=settings.debug)
+app.state.limiter = limiter
+register_exception_handlers(app)
 
 app.add_middleware(
     CORSMiddleware,
@@ -30,4 +35,5 @@ api_v1.include_router(projects_router)
 api_v1.include_router(linear_systems_router)
 api_v1.include_router(agent_router)
 api_v1.include_router(estimations_router)
+api_v1.include_router(knowledge_router)
 app.include_router(api_v1)

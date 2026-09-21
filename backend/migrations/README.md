@@ -10,6 +10,7 @@ SQL versionado para el esquema de Postgres. Aplicar los archivos **en orden num�
 | `002_create_core_schema.sql` | Crea `employees`, `projects`, `estimations`, `reports` y `knowledge_chunks`, índices, trigger `updated_at` y RLS. |
 | `003_rag_search.sql` | Añade `content_hash` e índice por ruta de Obsidian, y el RPC `match_knowledge_chunks` (similitud cosine). |
 | `004_reports_storage.sql` | Crea el bucket privado `reports` en Supabase Storage (PDF y DOCX, acceso por URL firmada). |
+| `005_audit_logs.sql` | Crea `audit_logs`: empleado, proyecto, estimación, timestamp y resumen de tools del agente. |
 
 ## Cómo aplicarlas
 
@@ -21,6 +22,7 @@ SQL versionado para el esquema de Postgres. Aplicar los archivos **en orden num�
 4. Pega y ejecuta el contenido de `002_create_core_schema.sql`.
 5. Pega y ejecuta el contenido de `003_rag_search.sql`.
 6. Pega y ejecuta el contenido de `004_reports_storage.sql`.
+7. Pega y ejecuta el contenido de `005_audit_logs.sql`.
 
 ### Opción 2 — CLI
 
@@ -31,13 +33,14 @@ supabase db query --linked -f backend/migrations/001_enable_pgvector.sql
 supabase db query --linked -f backend/migrations/002_create_core_schema.sql
 supabase db query --linked -f backend/migrations/003_rag_search.sql
 supabase db query --linked -f backend/migrations/004_reports_storage.sql
+supabase db query --linked -f backend/migrations/005_audit_logs.sql
 ```
 
 O copia los archivos a `supabase/migrations/` y usa `supabase db push`.
 
 ### Opción 3 — MCP `apply_migration`
 
-Si el servidor MCP de Supabase está conectado al proyecto, aplica cada archivo como una migración nombrada (`enable_pgvector`, `create_core_schema`, `rag_search`, `reports_storage`).
+Si el servidor MCP de Supabase está conectado al proyecto, aplica cada archivo como una migración nombrada (`enable_pgvector`, `create_core_schema`, `rag_search`, `reports_storage`, `audit_logs`).
 
 ## Verificación
 
@@ -54,7 +57,8 @@ where table_schema = 'public'
     'projects',
     'estimations',
     'reports',
-    'knowledge_chunks'
+    'knowledge_chunks',
+    'audit_logs'
   )
 order by table_name;
 

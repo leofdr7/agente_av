@@ -1,4 +1,5 @@
 import { EmptyState } from "@/components/empty-state";
+import { ErrorNotice } from "@/components/error-notice";
 import { EstimationList } from "@/components/estimation-list";
 import { PageHeader } from "@/components/page-header";
 import { formatApiError, type EstimationSummary } from "@/lib/api";
@@ -22,9 +23,7 @@ export default async function HistorialPage() {
         description="Corridas anteriores, de todos los proyectos."
       />
       {error ? (
-        <p className="text-sm text-destructive" role="alert">
-          {error}
-        </p>
+        <ErrorNotice title="No se pudo cargar el historial">{error}</ErrorNotice>
       ) : estimations.length === 0 ? (
         <EmptyState
           title="Aún no hay estimaciones"

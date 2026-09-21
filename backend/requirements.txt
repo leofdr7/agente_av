@@ -8,6 +8,7 @@ PyJWT[crypto]
 numpy
 sympy
 pytest
+slowapi
 supabase
 voyageai
 openai

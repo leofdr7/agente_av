@@ -10,6 +10,8 @@ from app.models.agent import AgentRunRequest
 from app.models.linear_system import SolutionMethod, SystemClassification
 from app.services.agent import (
     MAX_ROUNDS,
+    PROTOCOL_DIAGNOSE_FIRST,
+    PROTOCOL_SOLVE_BEFORE_NUMBERS,
     SYSTEM_PROMPT,
     TOOL_BUSCAR_CONOCIMIENTO,
     TOOL_DIAGNOSTICAR_SISTEMA,
@@ -19,6 +21,8 @@ from app.services.agent import (
     TOOL_SCHEMAS,
     AgentError,
     AgentRun,
+    _initial_message,
+    looks_like_numeric_solution,
     run_agent,
 )
 from app.services.linear_systems_engine import RAW_MATERIAL_CONSTRAINT
@@ -244,9 +248,22 @@ def fake_llm(*turns: SimpleNamespace) -> MagicMock:
 
 def fake_supabase() -> MagicMock:
     client = MagicMock()
-    client.table.return_value.insert.return_value.execute.return_value = MagicMock(
-        data=[{"id": ESTIMATION_ID}]
-    )
+    inserts: dict[str, dict] = {}
+
+    def table(name: str) -> MagicMock:
+        handle = MagicMock()
+
+        def insert(payload: dict) -> MagicMock:
+            inserts[name] = payload
+            result = MagicMock()
+            result.execute.return_value = MagicMock(data=[{"id": ESTIMATION_ID}])
+            return result
+
+        handle.insert.side_effect = insert
+        return handle
+
+    client.table.side_effect = table
+    client.inserts = inserts
     return client
 
 
@@ -294,13 +311,25 @@ def test_loop_ejecuta_las_tools_y_persiste_la_corrida() -> None:
     assert first_call["tools"] == TOOL_SCHEMAS
     assert "Sistema entregado ya estructurado" in first_call["messages"][0]["content"]
 
-    inserted = supabase.table.return_value.insert.call_args.args[0]
+    inserted = supabase.inserts["estimations"]
     assert inserted["problem_text"] == request.problem_text
     assert inserted["project_id"] == str(request.project_id)
     assert inserted["requested_by"] == str(EMPLOYEE_ID)
     assert inserted["result_json"]["final_response"] == ANALISIS
     assert inserted["result_json"]["A"] == techchip.A
     assert len(inserted["result_json"]["tools"]) == 4
+
+    audit = supabase.inserts["audit_logs"]
+    assert audit["employee_id"] == str(EMPLOYEE_ID)
+    assert audit["project_id"] == str(request.project_id)
+    assert audit["estimation_id"] == ESTIMATION_ID
+    assert audit["tools_used"] == [
+        TOOL_DIAGNOSTICAR_SISTEMA,
+        TOOL_RESOLVER_GAUSS,
+        TOOL_RESOLVER_GAUSS_JORDAN,
+        TOOL_RESOLVER_MATRIZ_INVERSA,
+    ]
+    assert "diagnosticar_sistema" in audit["tools_summary"]
 
 
 def test_loop_devuelve_los_resultados_de_las_tools_al_modelo() -> None:
@@ -324,16 +353,7 @@ def test_loop_devuelve_los_resultados_de_las_tools_al_modelo() -> None:
 
 
 def test_sin_matriz_el_mensaje_pide_extraer_los_coeficientes() -> None:
-    llm = fake_llm(turn(text_block(ANALISIS), stop_reason="end_turn"))
-
-    run_agent(
-        make_request(A=None, B=None),
-        EMPLOYEE_ID,
-        anthropic_client=llm,
-        supabase=fake_supabase(),
-    )
-
-    prompt = llm.messages.create.call_args.kwargs["messages"][0]["content"]
+    prompt = _initial_message(make_request(A=None, B=None))
     assert "extrae los coeficientes" in prompt
     assert "No resuelvas nada por tu cuenta" in prompt
 
@@ -351,9 +371,68 @@ def test_loop_se_detiene_tras_el_tope_de_rondas() -> None:
         )
 
     assert llm.messages.create.call_count == MAX_ROUNDS
-    supabase.table.return_value.insert.assert_not_called()
+    assert "estimations" not in supabase.inserts
 
 
 def test_a_y_b_deben_venir_juntos() -> None:
     with pytest.raises(ValueError, match="A y B deben entregarse juntos"):
         make_request(B=None)
+
+
+def test_looks_like_numeric_solution_detecta_un_vector_x() -> None:
+    assert looks_like_numeric_solution("La solución es X = (15, 20, 25, 10, 15, 20)")
+    assert looks_like_numeric_solution("x1=15, x2=20")
+    assert not looks_like_numeric_solution(ANALISIS)
+
+
+def test_loop_rechaza_resolver_antes_de_diagnosticar() -> None:
+    llm = fake_llm(
+        turn(tool_block(TOOL_RESOLVER_GAUSS, system_payload(), "toolu_skip")),
+        turn(tool_block(TOOL_DIAGNOSTICAR_SISTEMA, system_payload(), "toolu_diag")),
+        turn(text_block("Diagnóstico recibido; el sistema es compatible determinado."), stop_reason="end_turn"),
+    )
+
+    response = run_agent(
+        make_request(), EMPLOYEE_ID, anthropic_client=llm, supabase=fake_supabase()
+    )
+
+    assert response.result_json.tools[0].name == TOOL_RESOLVER_GAUSS
+    assert response.result_json.tools[0].is_error is True
+    assert PROTOCOL_DIAGNOSE_FIRST in response.result_json.tools[0].output["error"]
+    assert "solution" not in (response.result_json.tools[0].output or {})
+    assert response.result_json.tools[1].name == TOOL_DIAGNOSTICAR_SISTEMA
+    assert response.result_json.tools[1].is_error is False
+
+
+def test_loop_rechaza_un_vector_x_sin_haber_resuelto() -> None:
+    llm = fake_llm(
+        turn(tool_block(TOOL_DIAGNOSTICAR_SISTEMA, system_payload())),
+        turn(
+            text_block("X = (15, 20, 25, 10, 15, 20)"),
+            stop_reason="end_turn",
+        ),
+        turn(
+            tool_block(TOOL_RESOLVER_GAUSS, system_payload(), "toolu_g"),
+            tool_block(TOOL_RESOLVER_GAUSS_JORDAN, system_payload(), "toolu_gj"),
+            tool_block(TOOL_RESOLVER_MATRIZ_INVERSA, system_payload(), "toolu_inv"),
+        ),
+        turn(text_block(ANALISIS), stop_reason="end_turn"),
+    )
+
+    response = run_agent(
+        make_request(), EMPLOYEE_ID, anthropic_client=llm, supabase=fake_supabase()
+    )
+
+    reminders = [
+        message["content"]
+        for call in llm.messages.create.call_args_list
+        for message in call.kwargs["messages"]
+        if message.get("role") == "user" and isinstance(message.get("content"), str)
+    ]
+    assert any(PROTOCOL_SOLVE_BEFORE_NUMBERS in text for text in reminders)
+    names = [call.name for call in response.result_json.tools]
+    assert names[0] == TOOL_DIAGNOSTICAR_SISTEMA
+    assert TOOL_RESOLVER_GAUSS in names
+    assert response.final_response == ANALISIS
+    assert response.result_json.cross_validation is not None
+

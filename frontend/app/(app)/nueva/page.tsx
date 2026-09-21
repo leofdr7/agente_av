@@ -1,3 +1,4 @@
+import { ErrorNotice } from "@/components/error-notice";
 import { EstimationForm } from "@/components/estimation-form";
 import { PageHeader } from "@/components/page-header";
 import { formatApiError, type Project } from "@/lib/api";
@@ -22,9 +23,7 @@ export default async function NuevaPage() {
         description="Elige o crea el proyecto, anota el presupuesto y describe el sistema en lenguaje de planta."
       />
       {error ? (
-        <p className="text-sm text-destructive" role="alert">
-          {error}
-        </p>
+        <ErrorNotice title="No se pudieron cargar los proyectos">{error}</ErrorNotice>
       ) : (
         <EstimationForm projects={projects} />
       )}

@@ -20,10 +20,10 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Estimaciones · TechChip",
+  title: "Estimaciones · AgentA",
   description:
-    "Órdenes de estimación de álgebra vectorial para la planta TechChip Systems.",
-  applicationName: "Estimaciones TechChip",
+    "Órdenes de estimación de álgebra vectorial para AgentA.",
+  applicationName: "AgentA",
   appleWebApp: {
     capable: true,
     title: "Estimaciones",
