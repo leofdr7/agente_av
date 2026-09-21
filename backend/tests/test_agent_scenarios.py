@@ -19,7 +19,7 @@ from app.services.agent import (
     TOOL_RESOLVER_MATRIZ_INVERSA,
     run_agent,
 )
-from app.services.linear_systems_engine import RAW_MATERIAL_CONSTRAINT, SOLUTION_TOL
+from app.services.linear_systems_engine import NEGATIVE_SOLUTION_COMPONENT, SOLUTION_TOL
 from tests.fixtures import techchip
 from tests.test_agent import fake_supabase
 
@@ -137,8 +137,10 @@ def interpret_from_messages(
             for item in factibilidad.get("components") or []
         ]
         return (
-            "El plan de producción es inalcanzable por restricción de materias primas. "
-            f"El recurso restrictivo es la {resin}. "
+            "El plan de producción es inalcanzable: el motor marcó "
+            f"{factibilidad.get('reason_code')}. "
+            f"El recurso restrictivo es la {resin}, según los resource_names "
+            "que entregó la solicitud. "
             f"Quedan en negativo: {', '.join(str(item) for item in negatives if item) or variables[0]}. "
             "No presentes esas cantidades como un plan ejecutable."
         )
@@ -269,13 +271,16 @@ def test_agente_escasez_nombra_la_resina_de_encapsulado() -> None:
 
     assert trace.feasibility is not None
     assert trace.feasibility.infeasible is True
-    assert trace.feasibility.reason_code == RAW_MATERIAL_CONSTRAINT
+    assert trace.feasibility.reason_code == NEGATIVE_SOLUTION_COMPONENT
     assert any(value < 0 for value in (trace.cross_validation.solution if trace.cross_validation else []))
 
     text = response.final_response.lower()
+    # El nombre del recurso sale de los resource_names de la solicitud, no del
+    # reason_code: el motor solo reporta el hecho matemático.
     assert "resina de encapsulado" in text
     assert "restrictiv" in text
-    assert "inalcanzable" in text or "materias primas" in text
+    assert "inalcanzable" in text
+    assert NEGATIVE_SOLUTION_COMPONENT in text
     assert "no presentes" in text or "no presente" in text
 
 

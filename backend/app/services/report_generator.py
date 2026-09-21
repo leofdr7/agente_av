@@ -35,6 +35,7 @@ from app.services.agent import (
     TOOL_RESOLVER_GAUSS_JORDAN,
     TOOL_RESOLVER_MATRIZ_INVERSA,
 )
+from app.services.linear_systems_engine import NEGATIVE_SOLUTION_COMPONENT
 
 _APP_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = _APP_DIR / "templates"
@@ -58,7 +59,10 @@ CLASSIFICATION_LABELS = {
     SystemClassification.INCOMPATIBLE.value: "incompatible",
 }
 
-RAW_MATERIAL_REASON = "restriccion de materias primas"
+NEGATIVE_COMPONENT_TEXT = (
+    "componente de solución negativo: el vector solución tiene al menos un valor "
+    "negativo, así que el escenario planteado no es realizable"
+)
 
 
 class ReportError(Exception):
@@ -451,7 +455,7 @@ def _project_title(row: dict[str, Any]) -> str:
     text = (row.get("problem_text") or "").strip()
     if len(text) > 80:
         return text[:77] + "..."
-    return text or "Estimación de producción"
+    return text or "Estimación sin título"
 
 
 def _paragraphs(text: str, fallback: str) -> list[str]:
@@ -532,20 +536,17 @@ def _conclusions(
         label = CLASSIFICATION_LABELS.get(diagnosis.classification.value, diagnosis.classification.value)
         paragraphs.append(
             "Alerta de sistema singular: el diagnóstico clasifica el sistema como "
-            f"{label}. No existe un único plan de producción que cumpla las "
-            "restricciones de recursos; el motor no entregó un vector X y este "
-            "informe no debe leerse como una orden de fabricación."
+            f"{label}. No existe un único plan de asignación que satisfaga las "
+            "condiciones declaradas; el motor no entregó un vector X y este informe "
+            "no debe leerse como una solución del sistema."
         )
 
     feasibility = trace.feasibility
     if feasibility is not None and feasibility.infeasible:
         alert = True
-        reason = feasibility.reason_code or RAW_MATERIAL_REASON
-        if reason == RAW_MATERIAL_REASON:
-            reason_text = (
-                "restricción de materias primas: el vector solución tiene "
-                "cantidades de producción negativas, así que el plan no es realizable"
-            )
+        reason = feasibility.reason_code or NEGATIVE_SOLUTION_COMPONENT
+        if reason == NEGATIVE_SOLUTION_COMPONENT:
+            reason_text = NEGATIVE_COMPONENT_TEXT
         else:
             reason_text = reason
         details = []
@@ -563,7 +564,7 @@ def _conclusions(
             paragraphs.append(
                 "Los tres métodos coinciden en el mismo vector solución y la "
                 "verificación de sustitución directa queda dentro de tolerancia. "
-                "El plan de producción es matemáticamente coherente y factible."
+                "El plan de asignación es matemáticamente coherente y factible."
             )
         elif methods_agree:
             paragraphs.append(
@@ -571,7 +572,8 @@ def _conclusions(
             )
         else:
             paragraphs.append(
-                "Revisar la traza del motor: no hay un veredicto único de producción."
+                "Revisar la traza del motor: no hay un veredicto único sobre la "
+                "solución del sistema."
             )
 
     return paragraphs, alert

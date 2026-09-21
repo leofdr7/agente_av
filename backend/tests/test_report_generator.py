@@ -134,6 +134,7 @@ def test_context_includes_every_gauss_step_not_just_x() -> None:
     assert any("F" in step.description for step in gauss.step_blocks)
     assert ctx.methods_agree is True
     assert "coinciden" in ctx.comparison_verdict
+    assert "plan de asignación" in " ".join(ctx.conclusion_paragraphs).lower()
     html = render_html(ctx)
     assert "Resolución multimétodo" in html
     assert "Gauss-Jordan" in html
@@ -158,10 +159,18 @@ def test_singular_report_explains_business_alert_without_x() -> None:
     ctx = build_report_context(row)
     assert all(not method.ran for method in ctx.methods)
     assert ctx.needs_alert is True
-    assert "singular" in " ".join(ctx.conclusion_paragraphs).lower()
+    conclusiones = " ".join(ctx.conclusion_paragraphs).lower()
+    assert "singular" in conclusiones
+    # El informe no asume manufactura: sirve igual para reparto, asignación o mezcla.
+    assert "plan de asignación" in conclusiones
+    assert "solución del sistema" in conclusiones
+    assert "orden de fabricación" not in conclusiones
+    assert "plan de producción" not in conclusiones
     html = render_html(ctx)
     assert "Sistema singular" in html or "singular" in html.lower()
     assert "No hay tabla comparativa" in html
+    assert "Estimación por sistemas de ecuaciones lineales" in html
+    assert "Estimación de plan de producción" not in html
 
 
 def test_infeasible_flag_is_translated_to_business_language() -> None:
@@ -174,10 +183,10 @@ def test_infeasible_flag_is_translated_to_business_language() -> None:
     ctx = build_report_context(row)
     assert ctx.needs_alert is True
     joined = " ".join(ctx.conclusion_paragraphs).lower()
-    assert "materias primas" in joined
+    assert "componente de solución negativo" in joined
     assert "negativ" in joined
     html = render_html(ctx)
-    assert "infactibilidad" in html.lower() or "materias primas" in html.lower()
+    assert "infactibilidad" in html.lower() or "negativo" in html.lower()
 
 
 def test_missing_result_json_is_incomplete() -> None:

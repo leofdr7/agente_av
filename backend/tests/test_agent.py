@@ -1,5 +1,6 @@
 """Orquestación del agente: despacho de tools con el motor real y Anthropic simulado."""
 
+import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
@@ -25,7 +26,7 @@ from app.services.agent import (
     looks_like_numeric_solution,
     run_agent,
 )
-from app.services.linear_systems_engine import RAW_MATERIAL_CONSTRAINT
+from app.services.linear_systems_engine import NEGATIVE_SOLUTION_COMPONENT
 from tests.fixtures import techchip
 
 ESTIMATION_ID = "9c5f1b2a-1111-4c3d-9d5a-1c2b3a4d5e6f"
@@ -80,11 +81,75 @@ def test_expone_las_cinco_tools_del_brief() -> None:
         assert tool["input_schema"]["type"] == "object"
 
 
+# Vocabulario que asume manufactura: el modelo lee las tools antes de resolver, así que
+# aquí sesgaría su interpretación igual que lo haría el system prompt.
+DOMINIO_FIJO = [
+    "planta",
+    "línea de producto",
+    "línea de producción",
+    "disponibilidades",
+    "materia",
+    "recurso de la",
+]
+
+
+def test_las_descripciones_de_las_tools_hablan_en_terminos_matematicos() -> None:
+    schemas = json.dumps(TOOL_SCHEMAS, ensure_ascii=False).lower()
+    for termino in DOMINIO_FIJO:
+        assert termino not in schemas
+
+    sistema = TOOL_SCHEMAS[1]["input_schema"]["properties"]
+    assert "matriz de coeficientes cuadrada nxn del sistema ax=b" in sistema["A"]["description"].lower()
+    assert "cada fila es una ecuación" in sistema["A"]["description"].lower()
+    assert "términos independientes" in sistema["B"]["description"].lower()
+    assert "variables x1..xn" in sistema["variable_names"]["description"].lower()
+    assert "si el usuario los proporcionó" in sistema["variable_names"]["description"].lower()
+
+
+def test_el_mensaje_inicial_presenta_las_etiquetas_como_filas_y_columnas() -> None:
+    prompt = _initial_message(make_request(problem_text="Resuelve el sistema adjunto."))
+
+    assert "Nombres de las columnas de A (variables x1..xn)" in prompt
+    assert "Nombres de las filas de A (ecuaciones del sistema)" in prompt
+    # Los nombres del caso llegan como datos del usuario, no como vocabulario impuesto.
+    assert techchip.RESOURCE_NAMES[0] in prompt
+    for termino in DOMINIO_FIJO:
+        assert termino not in prompt.lower()
+
+
 def test_system_prompt_prohibe_calcular_y_exige_diagnosticar_primero() -> None:
     assert "NUNCA resuelvas el sistema de ecuaciones AX=B por tu cuenta" in SYSTEM_PROMPT
     assert "SIEMPRE llama primero a `diagnosticar_sistema`" in SYSTEM_PROMPT
-    assert "restricción de materias primas" in SYSTEM_PROMPT
     assert "linealmente dependientes" in SYSTEM_PROMPT
+
+
+def test_system_prompt_ordena_las_fuentes_de_terminologia_sin_fijar_un_dominio() -> None:
+    prioridades = [
+        SYSTEM_PROMPT.index("`resource_names`"),
+        SYSTEM_PROMPT.index("`buscar_conocimiento`", SYSTEM_PROMPT.index("`resource_names`")),
+        SYSTEM_PROMPT.index("los términos que el propio usuario usó"),
+    ]
+    assert prioridades == sorted(prioridades)
+    assert "`variable_names`" in SYSTEM_PROMPT
+    assert "solo si esos resultados son" in SYSTEM_PROMPT
+    assert (
+        "NUNCA asumas ni fuerces la terminología de un negocio, empresa o industria que el"
+        in SYSTEM_PROMPT
+    )
+
+
+def test_system_prompt_traduce_el_reason_code_neutro_con_la_cadena_de_prioridad() -> None:
+    assert NEGATIVE_SOLUTION_COMPONENT in SYSTEM_PROMPT
+    assert "NO lo leas como una restricción de materia prima" in SYSTEM_PROMPT
+    # La traducción del código apela a la misma cadena que el resto del prompt.
+    cadena = SYSTEM_PROMPT.index("`resource_names`")
+    assert SYSTEM_PROMPT.index("aplicando la cadena de prioridad de arriba") > cadena
+
+
+def test_system_prompt_no_impone_la_terminologia_de_un_caso_concreto() -> None:
+    for termino in techchip.RESOURCE_NAMES + techchip.VARIABLE_NAMES:
+        assert termino.lower() not in SYSTEM_PROMPT.lower()
+    assert "TechChip" not in SYSTEM_PROMPT
 
 
 # -- despacho sobre el motor real --------------------------------------------------
@@ -143,8 +208,9 @@ def test_escasez_de_resina_se_marca_infactible_para_que_el_modelo_lo_traduzca() 
     assert is_error is False
     factibilidad = output["validacion_cruzada"]["factibilidad"]
     assert factibilidad["infeasible"] is True
-    assert factibilidad["reason_code"] == RAW_MATERIAL_CONSTRAINT
-    # El motor nombra el recurso/línea afectada; el agente lo traduce a negocio.
+    assert factibilidad["reason_code"] == NEGATIVE_SOLUTION_COMPONENT
+    # El motor solo reporta el hecho matemático y la etiqueta que le pasaron; la
+    # interpretación de qué recurso lo provoca queda en manos del agente.
     assert any(
         component["label"] in techchip.VARIABLE_NAMES
         for component in factibilidad["components"]

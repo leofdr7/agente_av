@@ -9,7 +9,7 @@ from app.models.linear_system import (
     SystemClassification,
 )
 from app.services.linear_systems_engine import (
-    RAW_MATERIAL_CONSTRAINT,
+    NEGATIVE_SOLUTION_COMPONENT,
     SOLUTION_TOL,
     SingularSystemError,
     cross_validate_methods,
@@ -71,9 +71,9 @@ def test_escenario_escasez_de_resina_marca_la_solucion_como_infactible() -> None
     assert result.solved is True
     assert any(value < 0 for value in result.solution)
     assert result.feasibility.infeasible is True
-    assert result.feasibility.reason_code == RAW_MATERIAL_CONSTRAINT
+    assert result.feasibility.reason_code == NEGATIVE_SOLUTION_COMPONENT
     assert all(
-        RAW_MATERIAL_CONSTRAINT in reason for reason in result.feasibility.reasons
+        NEGATIVE_SOLUTION_COMPONENT in reason for reason in result.feasibility.reasons
     )
 
     if techchip.DATASET_B is techchip.B_PRIMARIO:

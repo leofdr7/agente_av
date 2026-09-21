@@ -54,8 +54,9 @@ TOOL_RESOLVER_GAUSS_JORDAN = "resolver_por_gauss_jordan"
 TOOL_RESOLVER_MATRIZ_INVERSA = "resolver_por_matriz_inversa"
 
 SYSTEM_PROMPT = """\
-Eres el agente de estimaciones de AgentA, una planta de manufactura (módulos de IA).
-Tu trabajo es interpretar, no calcular.
+Eres el agente de estimaciones de AgentA. Interpretas sistemas de ecuaciones lineales
+AX=B de cualquier tamaño nxn admitido por el motor, sobre cualquier dominio que el
+usuario plantee. Tu trabajo es interpretar, no calcular.
 
 REGLAS ABSOLUTAS
 1. NUNCA resuelvas el sistema de ecuaciones AX=B por tu cuenta. Nunca inventes,
@@ -69,35 +70,55 @@ REGLAS ABSOLUTAS
    (`resolver_por_gauss`, `resolver_por_gauss_jordan`, `resolver_por_matriz_inversa`)
    y compara sus resultados con el informe de validación cruzada que acompaña al
    tercero (`validacion_cruzada`) antes de redactar tu respuesta.
-5. Usa `buscar_conocimiento` para la terminología y el contexto de la planta: qué
-   recurso es cada fila de A, qué línea de producto es cada columna, qué unidades se
-   manejan.
+5. Usa `buscar_conocimiento` cuando necesites terminología o contexto que el enunciado
+   no te dé. Trata sus resultados como material de apoyo: úsalos solo si hablan del
+   problema que tienes delante y descártalos si no.
 
 INTERPRETACIÓN SEMÁNTICA (tu rol central)
-Traduce cada resultado numérico a lenguaje de negocio:
-- `feasibility.infeasible: true` (alguna componente de X es negativa): el plan de
-  producción es inalcanzable por restricción de materias primas. Identifica el
-  recurso concreto implicado (resina de encapsulado, litografía EUV, sustrato de
-  silicio, pruebas ATE, energía de cortado láser, inspección óptica) y qué línea de
-  producto queda en negativo. No presentes la cantidad negativa como un plan:
-  explícala como evidencia de que las disponibilidades no alcanzan.
-- `classification: incompatible`: el sistema no tiene solución. Las disponibilidades
-  declaradas se contradicen entre sí; no existe ninguna combinación de producción que
-  las consuma exactamente.
+Traduce cada resultado numérico al lenguaje del problema que te plantearon, sin
+importar de qué dominio sea.
+
+NUNCA asumas ni fuerces la terminología de un negocio, empresa o industria que el
+usuario no haya mencionado. Si no sabes cómo se llama algo, di "la variable x3" o "la
+ecuación 4" en lugar de inventarle un nombre.
+
+Para nombrar el recurso o la variable responsable de un resultado, usa la primera de
+estas fuentes que aplique, en este orden:
+1. Los `resource_names` (filas de A) y `variable_names` (columnas de A) si el usuario
+   los entregó en la solicitud. Tienen prioridad sobre cualquier otra fuente.
+2. El contexto que devolvió `buscar_conocimiento`, y solo si esos resultados son
+   relevantes al problema planteado.
+3. Si ninguna de las dos aplica, los términos que el propio usuario usó al describir
+   el problema.
+
+Lecturas obligadas de cada resultado del motor:
+- `feasibility.infeasible: true` con `reason_code: componente de solucion negativo`:
+  ese código es solo el hecho matemático (alguna componente de X salió negativa), no
+  una interpretación. NO lo leas como una restricción de materia prima ni como ningún
+  otro motivo de negocio por defecto. Nombra la variable en negativo y el recurso o la
+  ecuación que la bloquea aplicando la cadena de prioridad de arriba, igual que haces
+  con el diagnóstico de singularidad. No presentes la cantidad negativa como un
+  resultado válido: explícala como evidencia de que los valores declarados en B no
+  admiten una solución realizable.
+- `classification: incompatible`: el sistema no tiene solución. Las condiciones
+  declaradas en B se contradicen entre sí; no existe ninguna combinación de valores de
+  X que las satisfaga a la vez.
 - `classification: compatible_indeterminado`: hay infinitas soluciones. Dos o más
-  recursos son linealmente dependientes (una fila de A es combinación de otras), así
-  que el modelo está mal especificado y falta información para fijar un plan único.
-  Di cuántos grados de libertad hay y que hace falta una restricción adicional.
+  ecuaciones son linealmente dependientes (una fila de A es combinación de otras), así
+  que el modelo está mal especificado y falta información para fijar una solución
+  única. Di cuántos grados de libertad hay y que hace falta una condición adicional.
 - Nunca acompañes un sistema singular con un resultado numérico inventado.
 
 RESPUESTA FINAL
 Redacta en español un análisis listo para convertirse en informe, con:
-- el diagnóstico del sistema (det(A), rangos, clasificación) y su lectura de negocio;
+- el diagnóstico del sistema (det(A), rangos, clasificación) y su lectura en los
+  términos del problema;
 - los pasos intermedios de cada método que hayas ejecutado (operaciones de fila y
   despeje de cada variable), citando lo que devolvió el motor;
-- el vector X solo si el motor lo entregó, etiquetado por línea de producto;
+- el vector X solo si el motor lo entregó, etiquetando cada componente con el nombre
+  que corresponda según el orden de prioridad de arriba;
 - el resultado de la validación cruzada y del error de sustitución ‖AX-B‖;
-- la conclusión de negocio: si el plan es ejecutable o qué restricción lo bloquea.
+- la conclusión: si el escenario es alcanzable o qué restricción lo bloquea.
 """
 
 _SYSTEM_INPUT_SCHEMA: dict[str, Any] = {
@@ -106,21 +127,24 @@ _SYSTEM_INPUT_SCHEMA: dict[str, Any] = {
         "A": {
             "type": "array",
             "description": (
-                "Matriz de coeficientes cuadrada nxn. Cada fila es un recurso de la "
-                "planta y cada columna una línea de producto."
+                "Matriz de coeficientes cuadrada nxn del sistema AX=B. Cada fila es "
+                "una ecuación y cada columna la variable x1..xn que multiplica."
             ),
             "items": {"type": "array", "items": {"type": "number"}},
         },
         "B": {
             "type": "array",
-            "description": "Vector de disponibilidades, con n elementos.",
+            "description": (
+                "Vector de términos independientes del sistema, con n elementos: el "
+                "lado derecho de cada ecuación."
+            ),
             "items": {"type": "number"},
         },
         "variable_names": {
             "type": "array",
             "description": (
-                "Opcional. Nombre de negocio de cada columna de A (línea de producto), "
-                "en orden x1..xn."
+                "Opcional. Nombres para las columnas de A (variables x1..xn), en ese "
+                "orden, si el usuario los proporcionó. No los inventes."
             ),
             "items": {"type": "string"},
         },
@@ -132,17 +156,21 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
         "name": TOOL_BUSCAR_CONOCIMIENTO,
         "description": (
-            "Busca en la base de conocimiento de la planta (notas de Obsidian "
-            "indexadas) la terminología, los recursos, las líneas de producto y las "
-            "unidades del caso. Úsala para interpretar qué significa cada fila y cada "
-            "columna del sistema. No devuelve cálculos."
+            "Busca en la base de conocimiento indexada (notas de Obsidian) la "
+            "terminología, las entidades y las unidades del problema planteado. Úsala "
+            "para interpretar qué representa cada fila y cada columna del sistema, y "
+            "descarta los fragmentos que no hablen de este problema. No devuelve "
+            "cálculos."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "Consulta en lenguaje natural sobre la planta.",
+                    "description": (
+                        "Consulta en lenguaje natural sobre el problema o su "
+                        "terminología."
+                    ),
                 },
                 "top_k": {
                     "type": "integer",
@@ -437,7 +465,7 @@ class AgentRun:
 
 
 def _initial_message(request: AgentRunRequest) -> str:
-    parts = [f"Problema planteado por la planta:\n{request.problem_text}"]
+    parts = [f"Problema planteado por el usuario:\n{request.problem_text}"]
 
     if request.A is not None and request.B is not None:
         parts.append(
@@ -447,19 +475,19 @@ def _initial_message(request: AgentRunRequest) -> str:
         )
     else:
         parts.append(
-            "No se entregó la matriz: extrae los coeficientes de A y las "
-            "disponibilidades de B del enunciado y pásalos a las herramientas. No "
+            "No se entregó la matriz: extrae los coeficientes de A y los términos "
+            "independientes de B del enunciado y pásalos a las herramientas. No "
             "resuelvas nada por tu cuenta."
         )
 
     if request.variable_names:
         parts.append(
-            "Líneas de producto por columna (x1..xn): "
+            "Nombres de las columnas de A (variables x1..xn), en ese orden: "
             + json.dumps(request.variable_names, ensure_ascii=False)
         )
     if request.resource_names:
         parts.append(
-            "Recursos por fila de A: "
+            "Nombres de las filas de A (ecuaciones del sistema), en ese orden: "
             + json.dumps(request.resource_names, ensure_ascii=False)
         )
 

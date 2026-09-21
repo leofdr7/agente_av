@@ -40,7 +40,9 @@ FEASIBILITY_TOL = 1e-9
 # Decimales conservados en las instantáneas de la matriz de trabajo.
 SNAPSHOT_DECIMALS = 12
 
-RAW_MATERIAL_CONSTRAINT = "restriccion de materias primas"
+# Código técnico del motor: describe el hecho matemático, no una lectura de negocio.
+# La interpretación (qué recurso o variable lo provoca) la hace la capa del agente.
+NEGATIVE_SOLUTION_COMPONENT = "componente de solucion negativo"
 
 
 class SingularSystemError(Exception):
@@ -350,9 +352,10 @@ def check_feasibility(
 ) -> InfeasibilityFlag:
     """Marca como infactible toda solución con componentes negativas.
 
-    El vector es matemáticamente correcto, pero una cantidad negativa no es
-    producible. Se devuelve el motivo técnico (qué variable y por qué) para que la
-    capa de orquestación lo traduzca a lenguaje de negocio.
+    El vector es matemáticamente correcto, pero una componente negativa no es
+    realizable en los dominios donde las variables representan cantidades. Se
+    devuelve solo el motivo técnico (qué variable y con qué valor) para que la capa
+    de orquestación lo traduzca con la terminología del problema planteado.
     """
     components = [
         InfeasibleComponent(
@@ -363,7 +366,7 @@ def check_feasibility(
             reason=(
                 f"x{index + 1}"
                 + (f" ({variable_names[index]})" if variable_names else "")
-                + f" = {_fmt(float(value))} < 0: {RAW_MATERIAL_CONSTRAINT}"
+                + f" = {_fmt(float(value))} < 0: {NEGATIVE_SOLUTION_COMPONENT}"
             ),
         )
         for index, value in enumerate(solution)
@@ -372,7 +375,7 @@ def check_feasibility(
 
     return InfeasibilityFlag(
         infeasible=bool(components),
-        reason_code=RAW_MATERIAL_CONSTRAINT if components else None,
+        reason_code=NEGATIVE_SOLUTION_COMPONENT if components else None,
         components=components,
         reasons=[component.reason for component in components],
     )

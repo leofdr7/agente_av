@@ -20,7 +20,7 @@ class AgentRunRequest(BaseModel):
     project_id: UUID
     A: list[list[float]] | None = None
     B: list[float] | None = None
-    # Etiquetas de negocio: columnas de A (líneas de producto) y filas de A (recursos).
+    # Etiquetas que da el usuario: columnas de A (variables) y filas de A (ecuaciones).
     variable_names: list[str] | None = None
     resource_names: list[str] | None = None
 
