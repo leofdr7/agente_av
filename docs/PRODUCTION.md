@@ -5,7 +5,8 @@ archivos **no crea recursos remotos**: el despliegue solo queda completado despu
 de ejecutar el bootstrap, cargar las claves, publicar y verificar el sitio.
 
 Destino acordado: proyecto Vercel **agente-av**, equipo **leofdr7's projects**,
-subdominio `*.vercel.app` asignado por Vercel y Clerk **Development** para un piloto.
+subdominio [agente-av-phi.vercel.app](https://agente-av-phi.vercel.app)
+verificado en Vercel y Clerk **Development** para un piloto.
 El proyecto GCP es **agenta-produccion**, con facturación habilitada según su
 propietario. No se necesita comprar un dominio para este piloto.
 
@@ -103,11 +104,10 @@ Define solo metadatos y referencias, sin claves en esta configuración:
 export GCP_RUNTIME_SERVICE_ACCOUNT="agenta-runtime@$GCP_PROJECT_ID.iam.gserviceaccount.com"
 export SUPABASE_URL='https://TU_PROYECTO.supabase.co'
 export CLERK_JWKS_URL='https://TU_INSTANCIA.clerk.accounts.dev/.well-known/jwks.json'
-# Copia el dominio estable que aparece en agente-av → Settings → Domains.
-# El nombre del proyecto no garantiza que la URL sea agente-av.vercel.app.
-export FRONTEND_ORIGIN='https://SUBDOMINIO-ASIGNADO.vercel.app'
+export FRONTEND_ORIGIN='https://agente-av-phi.vercel.app'
 export CLERK_AUTHORIZED_PARTIES="$FRONTEND_ORIGIN"
-export ANTHROPIC_MODEL='MODELO_HABILITADO_EN_TU_CUENTA'
+# Acceso verificado con la API Models de esta cuenta.
+export ANTHROPIC_MODEL='claude-sonnet-5'
 # Sustituir 1 por cada versión que imprimió upload-secrets.sh.
 export ANTHROPIC_API_KEY_VERSION=1
 export SUPABASE_SERVICE_KEY_VERSION=1
@@ -175,21 +175,20 @@ Vincula el checkout desde la **raíz del repositorio** (no desde frontend):
 
 ```bash
 vercel teams ls
-# Usa el slug real de leofdr7's projects, no su nombre visible con espacios.
-export VERCEL_TEAM_SLUG='SLUG_REAL_DEL_EQUIPO'
+export VERCEL_TEAM_SLUG='leofdr7s-projects'
 vercel link --project agente-av --scope "$VERCEL_TEAM_SLUG"
 vercel git connect --yes
-vercel env add NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY production
-vercel env add CLERK_SECRET_KEY production
-printf '%s' "$NEXT_PUBLIC_API_URL" | vercel env add NEXT_PUBLIC_API_URL production
+vercel env add NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY production --no-sensitive
+vercel env add CLERK_SECRET_KEY production --sensitive
+printf '%s' "$NEXT_PUBLIC_API_URL" | vercel env add NEXT_PUBLIC_API_URL production --no-sensitive
 printf '%s' '/sign-in' | vercel env add NEXT_PUBLIC_CLERK_SIGN_IN_URL production
 printf '%s' '/sign-up' | vercel env add NEXT_PUBLIC_CLERK_SIGN_UP_URL production
 printf '%s' '/' | vercel env add NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL production
 printf '%s' '/' | vercel env add NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL production
 
-vercel pull --yes --environment=production
-vercel build --prod
-vercel deploy --prebuilt --prod
+vercel deploy --prod --yes \
+  --build-env="NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL" \
+  --env="NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL"
 ```
 
 Los comandos `env add ... production` reciben `pk_test_…` y `sk_test_…` durante
@@ -200,13 +199,14 @@ son públicas. `CLERK_SECRET_KEY` queda privada en el servidor de Vercel. Ningun
 clave de Supabase/Anthropic/embeddings debe usar `NEXT_PUBLIC_` ni estar en Vercel.
 Si una variable ya existe, usa `vercel env update NOMBRE production`.
 
-`vercel build` usa `npm ci` y las variables Production descargadas por `pull`.
+Vercel ejecuta `npm ci` y `npm run build` con las variables de su entorno Production.
+La clave privada se guarda como Secret; `vercel pull` la sustituye por `[SENSITIVE]`,
+por lo que este flujo compila en Vercel y no descarga la clave a GitHub Actions.
 `NEXT_PUBLIC_API_URL` se fija al compilar: cambiarla requiere reconstruir. Actions
-la toma de la salida del despliegue del backend; el entorno del proceso tiene
-precedencia sobre los valores descargados. No subas `.vercel` ni los `.env` que
-contiene. Las variables sensibles de Vercel deben estar disponibles para este
-build externo: no marques `CLERK_SECRET_KEY` como no recuperable por CLI si tu
-configuración de Vercel impediría descargarla para compilar.
+la toma de la salida del backend y la pasa explícitamente al build y al runtime.
+`.vercelignore` limita la subida al código del frontend, excluyendo `.env`,
+dependencias instaladas y artefactos locales. No subas `.vercel` ni sus `.env`.
+El comando espera a que termine el build y falla si Vercel no puede publicarlo.
 
 ## 5. GitHub Actions
 
@@ -266,6 +266,12 @@ gh secret set VERCEL_TOKEN --repo "$GITHUB_REPOSITORY" --env production
 
 `VERCEL_TOKEN` es el único secret que necesita el workflow de despliegue en GitHub.
 Créalo con acceso al equipo/proyecto correcto y fecha de expiración gestionada.
+El inicio de sesión OAuth de la CLI no sustituye este token: en esta cuenta,
+intentar crearlo mediante la API de la CLI devuelve
+`Cannot create tokens for this app. (403)`. Créalo desde
+[Account Settings → Tokens](https://vercel.com/account/tokens) y guárdalo con
+`gh secret set` o en GitHub → Settings → Environments → production, sin pegarlo
+en un commit ni en el chat.
 Las claves del backend permanecen en Secret Manager; las de frontend en Vercel.
 Activa un ruleset de `main` que exija PR y los tres checks de CI antes del merge;
 si habilitas revisores obligatorios del entorno, la publicación esperará aprobación.
@@ -278,7 +284,7 @@ iguales a las de producción. No confundirlas con las variables del entorno
 
 ## 6. Subdominio de Vercel y migración futura
 
-Usa el dominio estable `*.vercel.app` que Vercel asigne al proyecto `agente-av`.
+Usa el dominio estable `agente-av-phi.vercel.app` del proyecto `agente-av`.
 Vercel proporciona HTTPS para ese dominio; no ejecutes `vercel domains add` ni
 modifiques DNS durante el piloto. Copia la URL real en `FRONTEND_ORIGIN` y en la
 variable GitHub `CLERK_AUTHORIZED_PARTIES` antes de desplegar el backend.

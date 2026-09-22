@@ -108,14 +108,13 @@ jobs:
           done
       - run: npm install --global vercel@59.25.2
       # Ejecutar desde raíz: el proyecto de Vercel tiene Root Directory=frontend.
-      - name: Pull production settings
-        run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
-      - name: Build with the deployed backend URL
-        # La variable del job tiene precedencia sobre el .env descargado por pull.
-        run: vercel build --prod --token="$VERCEL_TOKEN"
-      - name: Publish production
+      # Vercel conserva CLERK_SECRET_KEY: env pull devuelve [SENSITIVE].
+      - name: Build and publish production on Vercel
         id: deploy
         run: |
-          url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          url=$(vercel deploy --prod --yes --token="$VERCEL_TOKEN" \
+            --project="$VERCEL_PROJECT_ID" --scope="$VERCEL_ORG_ID" \
+            --build-env="NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL" \
+            --env="NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL")
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Frontend: $url" >> "$GITHUB_STEP_SUMMARY"
