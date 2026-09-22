@@ -7,8 +7,9 @@ de ejecutar el bootstrap, cargar las claves, publicar y verificar el sitio.
 Destino acordado: proyecto Vercel **agente-av**, equipo **leofdr7's projects**,
 subdominio [agente-av-phi.vercel.app](https://agente-av-phi.vercel.app)
 verificado en Vercel y Clerk **Development** para un piloto.
-El proyecto GCP es **agenta-produccion**, con facturación habilitada según su
-propietario. No se necesita comprar un dominio para este piloto.
+El proyecto GCP es **agenta-produccion**. Debe tener una cuenta de facturación
+activa vinculada antes de habilitar Cloud Run, Artifact Registry y Secret Manager.
+No se necesita comprar un dominio para este piloto.
 
 ## 1. Datos y accesos
 
@@ -33,6 +34,19 @@ export GITHUB_OWNER_ID=$(gh api "repos/$GITHUB_REPOSITORY" --jq '.owner.id')
 export EMBEDDING_PROVIDER='openai'
 export EMBEDDING_MODEL='text-embedding-3-small'
 ```
+
+Comprueba la vinculación de facturación antes del bootstrap:
+
+```bash
+gcloud billing projects describe "$GCP_PROJECT_ID"
+gcloud billing accounts list --filter=open=true
+# Si billingEnabled es false, selecciona una cuenta activa y vincúlala:
+gcloud billing projects link "$GCP_PROJECT_ID" --billing-account='ID_CUENTA_ACTIVA'
+gcloud billing projects describe "$GCP_PROJECT_ID" --format='value(billingEnabled)'
+```
+
+La última consulta debe devolver `True`. Una cuenta cerrada (`open=false`) no
+habilita los servicios aunque exista o haya tenido un método de pago.
 
 El ejemplo conserva OpenAI, usado en el entorno local. Si el índice pgvector usa
 Voyage, selecciona `voyage` y su modelo. Indexación y consulta deben usar el mismo
