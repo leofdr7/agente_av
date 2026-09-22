@@ -1,15 +1,20 @@
-# Producción: Cloud Run + Vercel
+# Despliegue: Cloud Run + Vercel
 
 Esta guía y los scripts configuran el repositorio `leofdr7/agente_av`. Crear estos
 archivos **no crea recursos remotos**: el despliegue solo queda completado después
-de ejecutar el bootstrap, cargar las claves, publicar y verificar el dominio.
+de ejecutar el bootstrap, cargar las claves, publicar y verificar el sitio.
+
+Destino acordado: proyecto Vercel **agente-av**, equipo **leofdr7's projects**,
+subdominio `*.vercel.app` asignado por Vercel y Clerk **Development** para un piloto.
+El proyecto GCP es **agenta-produccion**, con facturación habilitada según su
+propietario. No se necesita comprar un dominio para este piloto.
 
 ## 1. Datos y accesos
 
 Se necesita un proyecto GCP con facturación habilitada, permisos para activar APIs,
 crear cuentas de servicio, configurar IAM/WIF, Artifact Registry y Secret Manager;
-un equipo/proyecto Vercel con acceso al repositorio GitHub; y acceso al DNS del
-dominio propio. Instala gcloud, Docker, gh y Node 24 LTS. Desde la raíz:
+acceso al equipo/proyecto Vercel indicado y al repositorio GitHub. Instala gcloud,
+Docker, gh y Node 24 LTS. Desde la raíz:
 
 ```bash
 gcloud auth login
@@ -17,7 +22,7 @@ gh auth login
 npm install --global vercel@59.25.2
 vercel login
 
-export GCP_PROJECT_ID='TU_PROYECTO'
+export GCP_PROJECT_ID='agenta-produccion'
 export GCP_REGION='us-central1'
 export ARTIFACT_REGISTRY_REPOSITORY='agenta'
 export CLOUD_RUN_SERVICE='agenta-api'
@@ -32,9 +37,21 @@ El ejemplo conserva OpenAI, usado en el entorno local. Si el índice pgvector us
 Voyage, selecciona `voyage` y su modelo. Indexación y consulta deben usar el mismo
 modelo y dimensión (512); cambiar de proveedor requiere reindexar el vault.
 
-Prepara una instancia **Production** de Clerk, sus claves `pk_live_…` y `sk_live_…`,
-el JWKS/emisor y el dominio permitido. Deshabilita registro abierto si solo deben
-entrar empleados invitados. Aplica las migraciones de
+Para el piloto usa las claves `pk_test_…` y `sk_test_…` de tu instancia Clerk
+**Development**, junto con su JWKS/emisor `https://<instancia>.clerk.accounts.dev`.
+La instancia de Clerk y los entornos llamados `production` de Vercel/GitHub son
+configuraciones independientes. Conserva `ENVIRONMENT=production`, `DEBUG=false`
+y `AUTH_DISABLED=false` en Cloud Run: el backend valida también JWT de Development.
+Usa siempre claves y JWKS de la misma instancia.
+
+Clerk permite sus claves Development en los subdominios del proveedor para
+pruebas. Limita esas instancias a 100 usuarios y no las considera aptas para
+cargas de producción. Sus usuarios no se transfieren entre instancias.
+Consulta [entornos de Clerk](https://clerk.com/docs/guides/development/managing-environments).
+Clerk **Production** requiere un dominio bajo tu control y sus registros DNS;
+no admite `*.vercel.app`. Consulta [Clerk en Vercel](https://clerk.com/docs/guides/development/deployment/vercel).
+
+Deshabilita registro abierto si solo deben entrar empleados invitados. Aplica las migraciones de
 [Supabase](../backend/migrations/README.md) en orden y verifica el bucket privado
 `reports` antes del primer despliegue; la publicación no ejecuta SQL ni migra datos.
 
@@ -64,7 +81,8 @@ El segundo script pide claves sin mostrarlas y usa stdin para enviarlas a
 (o `VOYAGE_API_KEY`). Guarda los **números de versión** impresos, nunca los valores
 en Git. El backend verifica JWT con JWKS público; conserva la clave privada de
 Clerk solicitada en Secret Manager, aunque hoy no llama a su API administrativa.
-La misma clave privada de la instancia de producción se configura en Vercel.
+La misma clave privada de la instancia elegida (Development para el piloto) se
+configura en Vercel. No cambies esa clave por una de otra instancia aisladamente.
 
 Cada secret se crea y concede explícitamente así (el script ejecuta estos comandos):
 
@@ -84,8 +102,11 @@ Define solo metadatos y referencias, sin claves en esta configuración:
 ```bash
 export GCP_RUNTIME_SERVICE_ACCOUNT="agenta-runtime@$GCP_PROJECT_ID.iam.gserviceaccount.com"
 export SUPABASE_URL='https://TU_PROYECTO.supabase.co'
-export CLERK_JWKS_URL='https://TU_HOST_CLERK/.well-known/jwks.json'
-export CLERK_AUTHORIZED_PARTIES='https://app.tudominio.com'
+export CLERK_JWKS_URL='https://TU_INSTANCIA.clerk.accounts.dev/.well-known/jwks.json'
+# Copia el dominio estable que aparece en agente-av → Settings → Domains.
+# El nombre del proyecto no garantiza que la URL sea agente-av.vercel.app.
+export FRONTEND_ORIGIN='https://SUBDOMINIO-ASIGNADO.vercel.app'
+export CLERK_AUTHORIZED_PARTIES="$FRONTEND_ORIGIN"
 export ANTHROPIC_MODEL='MODELO_HABILITADO_EN_TU_CUENTA'
 # Sustituir 1 por cada versión que imprimió upload-secrets.sh.
 export ANTHROPIC_API_KEY_VERSION=1
@@ -117,12 +138,16 @@ las rutas `/api/v1` siguen exigiendo JWT de Clerk. Si una política de organizac
 impide IAM `allUsers`, un administrador debe adaptar el acceso público de Cloud
 Run antes de publicar. Los orígenes CORS y el claim `azp` se limitan exactamente a
 `CLERK_AUTHORIZED_PARTIES`, separados por comas, sin rutas ni comodines.
-Incluye el dominio `vercel.app` solo si también se usará para iniciar sesión.
+En el piloto autoriza exactamente el subdominio estable de `agente-av`, que será
+el origen del inicio de sesión. No autorices `https://*.vercel.app` ni todos los
+dominios de previews.
 
 La imagen usa dos etapas, usuario 10001, dependencias fijadas, bibliotecas PDF y
 `exec` para recibir SIGTERM. No contiene `.env`, tests ni pytest. `PORT` es variable.
 `ENVIRONMENT=production` rechaza `DEBUG=true`, `AUTH_DISABLED=true`, orígenes HTTP
- o claves ausentes. Docker Compose fija `ENVIRONMENT=development` y puerto 8000.
+o claves ausentes. Estas comprobaciones no exigen claves `sk_live_`: el modo
+Development de Clerk no desactiva la autenticación del backend. Docker Compose
+fija `ENVIRONMENT=development` y puerto 8000.
 
 `/health/live` no llama a servicios externos; lo usan el HEALTHCHECK de Docker y
 las sondas HTTP de arranque/liveness de Cloud Run (Cloud Run no usa el HEALTHCHECK
@@ -138,8 +163,8 @@ persisten en Supabase Storage, no en el filesystem efímero del contenedor.
 
 ## 4. Vercel conectado a GitHub
 
-En Vercel crea/importa el proyecto desde `leofdr7/agente_av`, concede acceso de la
-GitHub App y selecciona **Root Directory: frontend**, framework **Next.js**,
+En Vercel usa el proyecto existente **agente-av** de **leofdr7's projects**,
+conecta `leofdr7/agente_av` y selecciona **Root Directory: frontend**, framework **Next.js**,
 Node **24.x** y rama Production **main**. Puedes crear el proyecto sin publicar
 hasta configurar variables. El archivo `frontend/vercel.json` deshabilita los
 builds automáticos de Git en todas las ramas: la conexión se conserva y Actions
@@ -149,7 +174,10 @@ duplicadas y carreras. No se generan previews automáticas.
 Vincula el checkout desde la **raíz del repositorio** (no desde frontend):
 
 ```bash
-vercel link --project NOMBRE_PROYECTO --scope EQUIPO
+vercel teams ls
+# Usa el slug real de leofdr7's projects, no su nombre visible con espacios.
+export VERCEL_TEAM_SLUG='SLUG_REAL_DEL_EQUIPO'
+vercel link --project agente-av --scope "$VERCEL_TEAM_SLUG"
 vercel git connect --yes
 vercel env add NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY production
 vercel env add CLERK_SECRET_KEY production
@@ -164,7 +192,9 @@ vercel build --prod
 vercel deploy --prebuilt --prod
 ```
 
-La primera clave es **NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY**, el nombre que consume
+Los comandos `env add ... production` reciben `pk_test_…` y `sk_test_…` durante
+este piloto: `production` selecciona el entorno de Vercel, no crea una instancia
+Clerk Production. La primera clave es **NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY**, el nombre que consume
 Next.js/Clerk; `CLERK_PUBLISHABLE_KEY` solo no sirve. Solo esa clave y las URLs
 son públicas. `CLERK_SECRET_KEY` queda privada en el servidor de Vercel. Ninguna
 clave de Supabase/Anthropic/embeddings debe usar `NEXT_PUBLIC_` ni estar en Vercel.
@@ -246,13 +276,42 @@ ocurría antes, y variables de repositorio `EMBEDDING_PROVIDER`/`EMBEDDING_MODEL
 iguales a las de producción. No confundirlas con las variables del entorno
 `production`; no se heredan entre ámbitos. No activa indexación solo al desplegar.
 
-## 6. Dominio propio y HTTPS
+## 6. Subdominio de Vercel y migración futura
+
+Usa el dominio estable `*.vercel.app` que Vercel asigne al proyecto `agente-av`.
+Vercel proporciona HTTPS para ese dominio; no ejecutes `vercel domains add` ni
+modifiques DNS durante el piloto. Copia la URL real en `FRONTEND_ORIGIN` y en la
+variable GitHub `CLERK_AUTHORIZED_PARTIES` antes de desplegar el backend.
+
+Verifica el piloto:
+
+```bash
+curl --fail --show-error --silent "$NEXT_PUBLIC_API_URL/health/ready"
+curl --head --location "$FRONTEND_ORIGIN/sign-in"
+```
+
+Inicia sesión con un empleado invitado, crea una estimación y descarga PDF/DOCX.
+Mantén el piloto limitado a las personas de prueba acordadas.
+
+### Paso posterior a Clerk Production
+
+Necesitarás un dominio bajo tu control. Cuando lo tengas, configura ese dominio
+en Vercel y completa los registros DNS de la instancia Clerk Production. Cambia
+juntos `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_JWKS_URL`,
+el emisor si se fijó explícitamente, los orígenes/redirects y vuelve a desplegar.
+
+Planifica también las cuentas: `employees.clerk_user_id` identifica al usuario
+de la instancia de Clerk. Los usuarios nuevos de Production tendrán otros IDs;
+cambiar solo las claves no conserva el acceso a sus expedientes. Antes de migrar
+datos útiles, establece un mapeo verificado de identidades y conserva los UUID
+internos de `employees`, a los que se vinculan proyectos y estimaciones. Revisa
+también invitaciones, metadatos `name`/`role`, claims y proveedores de inicio de sesión.
 
 Con un dominio que ya poseas:
 
 ```bash
-vercel domains add app.tudominio.com NOMBRE_PROYECTO --scope EQUIPO
-vercel domains inspect app.tudominio.com --scope EQUIPO
+vercel domains add app.tudominio.com agente-av --scope "$VERCEL_TEAM_SLUG"
+vercel domains inspect app.tudominio.com --scope "$VERCEL_TEAM_SLUG"
 ```
 
 En tu proveedor DNS crea **exactamente los registros A/CNAME/TXT que muestre

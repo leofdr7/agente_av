@@ -401,7 +401,9 @@ cd backend && pytest
 
 La [guía de producción](docs/PRODUCTION.md) incluye el bootstrap de GCP, Secret
 Manager, Workload Identity Federation, despliegue de Cloud Run, conexión de Vercel
-con GitHub, variables, dominio propio con HTTPS, verificación y rollback.
+con GitHub, variables, subdominio de Vercel con HTTPS, verificación y rollback.
+El lanzamiento inicial usa Clerk Development como piloto; la guía explica el
+paso posterior a Clerk Production con dominio propio y la migración de identidades.
 Los workflows `ci.yml` y `deploy-production.yml` ejecutan las comprobaciones antes
 de publicar cada merge a `main`. Se requieren las cuentas, claves y DNS descritos
 en la guía para activar los recursos remotos.
