@@ -9,11 +9,11 @@ export function StatusDot({ status }: { status: ProjectStatus }) {
       <span
         aria-hidden
         className={cn(
-          "size-1.5 shrink-0 rounded-full",
+          "size-2 shrink-0 rounded-full",
           status === "active" && "bg-copper",
           status === "draft" && "bg-steel/50",
           status === "on_hold" && "bg-steel",
-          status === "completed" && "bg-ink",
+          status === "completed" && "bg-[var(--verification)]",
           status === "archived" && "bg-ink/30",
         )}
       />

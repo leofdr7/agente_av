@@ -7,7 +7,6 @@ import { toast } from "sonner";
 import { submitEstimation, type ActionState } from "@/app/(app)/actions";
 import { ErrorNotice } from "@/components/error-notice";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,9 +14,9 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { Project } from "@/lib/api";
 import { formatBudget } from "@/lib/format";
 import { cn } from "cn";
+import "./form-design.css";
 
-const fieldControlClass =
-  "h-9 rounded-md bg-sheet focus-visible:border-copper focus-visible:ring-3 focus-visible:ring-copper/40";
+const fieldControlClass = "estimation-control";
 
 function budgetText(project: Project | undefined): string {
   return project?.budget != null ? String(project.budget) : "";
@@ -85,189 +84,175 @@ export function EstimationForm({ projects }: { projects: Project[] }) {
   };
 
   return (
-    <Card className="rounded-md bg-sheet py-5 shadow-none ring-1 ring-ink/12 [--card-spacing:--spacing(5)] dark:ring-ink/20">
-      <CardContent className="px-4 sm:px-6">
-        <form
-          action={action}
-          className="flex flex-col gap-8"
-          aria-busy={pending}
-          onSubmit={(event) => {
-            if (pending) event.preventDefault();
-          }}
-        >
-          <input type="hidden" name="mode" value={mode} />
-          <input type="hidden" name="budget" value={budgetSubmitValue(budget)} />
+    <form
+      action={action}
+      className="estimation-form"
+      aria-busy={pending}
+      onSubmit={(event) => {
+        if (pending) event.preventDefault();
+      }}
+    >
+      <input type="hidden" name="mode" value={mode} />
+      <input type="hidden" name="budget" value={budgetSubmitValue(budget)} />
 
-          <fieldset className="flex flex-col gap-2" disabled={pending}>
-            <legend className="text-sm font-medium text-ink">Proyecto</legend>
-            <ToggleGroup
-              value={[mode]}
-              onValueChange={(next) => {
-                const value = next[0];
-                if (value === "existing" || value === "new") {
-                  chooseMode(value);
-                }
-              }}
+      <div className="estimation-context">
+        <fieldset className="estimation-project" disabled={pending}>
+          <legend className="estimation-label">Proyecto</legend>
+          <ToggleGroup
+            value={[mode]}
+            onValueChange={(next) => {
+              const value = next[0];
+              if (value === "existing" || value === "new") {
+                chooseMode(value);
+              }
+            }}
+            disabled={pending}
+            spacing={0}
+            className="estimation-mode"
+            aria-label="Tipo de proyecto"
+          >
+            <ToggleGroupItem
+              value="existing"
+              disabled={projects.length === 0 || pending}
+              className="estimation-mode-option"
+            >
+              Existente
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="new"
               disabled={pending}
-              spacing={0}
-              className="grid w-full min-w-0 grid-cols-2 overflow-hidden rounded-md bg-paper ring-1 ring-ink/15 focus-within:ring-2 focus-within:ring-copper dark:bg-background dark:ring-ink/25"
-              aria-label="Tipo de proyecto"
+              className="estimation-mode-option"
             >
-              <ToggleGroupItem
-                value="existing"
-                disabled={projects.length === 0 || pending}
-                className={cn(
-                  "h-9 min-w-0 flex-1 rounded-none border-0 bg-transparent px-2 text-steel hover:bg-sheet hover:text-ink",
-                  "focus-visible:border-copper focus-visible:ring-3 focus-visible:ring-copper/40",
-                  "aria-pressed:bg-copper aria-pressed:text-white aria-pressed:hover:bg-copper aria-pressed:hover:text-white",
-                  "data-[pressed]:bg-copper data-[pressed]:text-white data-[pressed]:hover:bg-copper data-[pressed]:hover:text-white",
-                )}
-              >
-                Existente
-              </ToggleGroupItem>
-              <ToggleGroupItem
-                value="new"
+              Nuevo
+            </ToggleGroupItem>
+          </ToggleGroup>
+
+          {mode === "existing" ? (
+            <div className="estimation-field">
+              <Label htmlFor="project_id" className="estimation-label">
+                Cuál
+              </Label>
+              <select
+                id="project_id"
+                name="project_id"
+                value={projectId}
+                onChange={(event) => chooseProject(event.target.value)}
+                required
                 disabled={pending}
-                className={cn(
-                  "h-9 min-w-0 flex-1 rounded-none border-0 bg-transparent px-2 text-steel hover:bg-sheet hover:text-ink",
-                  "focus-visible:border-copper focus-visible:ring-3 focus-visible:ring-copper/40",
-                  "aria-pressed:bg-copper aria-pressed:text-white aria-pressed:hover:bg-copper aria-pressed:hover:text-white",
-                  "data-[pressed]:bg-copper data-[pressed]:text-white data-[pressed]:hover:bg-copper data-[pressed]:hover:text-white",
-                )}
+                className={fieldControlClass}
               >
-                Nuevo
-              </ToggleGroupItem>
-            </ToggleGroup>
-
-            {mode === "existing" ? (
-              <div className="flex flex-col gap-1">
-                <Label htmlFor="project_id" className="text-ink">
-                  Cuál
-                </Label>
-                <select
-                  id="project_id"
-                  name="project_id"
-                  value={projectId}
-                  onChange={(event) => chooseProject(event.target.value)}
-                  required
-                  disabled={pending}
-                  className={cn(
-                    "w-full border border-input px-2.5 text-base outline-none disabled:opacity-60 md:text-sm",
-                    fieldControlClass,
-                  )}
-                >
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                      {project.budget != null ? ` · ${formatBudget(project.budget)}` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-1">
-                <Label htmlFor="project_name" className="text-ink">
-                  Nombre
-                </Label>
-                <Input
-                  id="project_name"
-                  name="project_name"
-                  required
-                  maxLength={200}
-                  placeholder="Nombre del proyecto o lote a evaluar"
-                  disabled={pending}
-                  className={fieldControlClass}
-                />
-              </div>
-            )}
-          </fieldset>
-
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="budget" className="text-ink">
-              Presupuesto asociado
-            </Label>
-            <div
-              className={cn(
-                "flex h-9 min-w-0 items-center rounded-md border border-input bg-sheet",
-                "focus-within:border-copper focus-within:ring-3 focus-within:ring-copper/40",
-                pending && "opacity-50",
-              )}
-            >
-              <span
-                aria-hidden
-                className="shrink-0 pl-2.5 pr-1 font-mono text-sm text-steel"
-              >
-                $
-              </span>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                    {project.budget != null ? ` (${formatBudget(project.budget)})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="estimation-field">
+              <Label htmlFor="project_name" className="estimation-label">
+                Nombre
+              </Label>
               <Input
-                id="budget"
-                inputMode="decimal"
-                value={formatBudgetDisplay(budget)}
-                onChange={(event) => setBudget(sanitizeBudgetInput(event.target.value))}
-                placeholder="Monto disponible, $"
+                id="project_name"
+                name="project_name"
+                required
+                maxLength={200}
+                placeholder="Nombre del proyecto o lote a evaluar"
                 disabled={pending}
-                aria-describedby="budget-help"
-                className="h-full min-w-0 flex-1 rounded-md border-0 bg-transparent px-0 font-mono shadow-none focus-visible:border-transparent focus-visible:ring-0 disabled:bg-transparent dark:bg-transparent"
+                className={fieldControlClass}
               />
             </div>
-            <p id="budget-help" className="text-xs text-steel">
-              Queda guardado en el proyecto, en dólares.
-            </p>
-          </div>
+          )}
+        </fieldset>
 
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="problem_text" className="text-ink">
-              Problema vectorial
-            </Label>
-            <Textarea
-              id="problem_text"
-              name="problem_text"
-              required
-              minLength={8}
-              rows={8}
-              placeholder="Describe el sistema: qué variables intervienen, qué restricciones tienes y qué necesitas resolver. AgentA extrae las ecuaciones automáticamente por ti..."
-              disabled={pending}
-              aria-describedby="problem-help"
-              className="min-h-40 rounded-md bg-sheet focus-visible:border-copper focus-visible:ring-3 focus-visible:ring-copper/40"
-            />
-            <p id="problem-help" className="text-xs text-steel">
-              El agente interpreta lenguaje natural; no hace falta escribir solo números.
-            </p>
-          </div>
-
-          {state?.error ? (
-            <ErrorNotice title="No se pudo generar la estimación">
-              {state.error}
-            </ErrorNotice>
-          ) : null}
-
-          {pending ? (
-            <p
-              className="border-l-[3px] border-copper bg-paper px-3 py-2 text-sm text-ink dark:bg-background"
-              aria-live="polite"
-              role="status"
-            >
-              El agente está diagnosticando y resolviendo el sistema. Puede tardar
-              cerca de un minuto.
-            </p>
-          ) : null}
-
-          <Button
-            type="submit"
-            disabled={pending}
-            className="h-10 w-full max-w-full gap-2 whitespace-nowrap md:w-auto"
-          >
-            {pending ? (
-              <>
-                <Loader2 className="size-4 animate-spin" aria-hidden />
-                Calculando...
-              </>
-            ) : (
-              "Enviar al agente"
+        <div className="estimation-field estimation-budget">
+          <Label htmlFor="budget" className="estimation-label">
+            Presupuesto asociado
+          </Label>
+          <div
+            className={cn(
+              "estimation-budget-control",
+              pending && "opacity-50",
             )}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+          >
+            <span
+              aria-hidden
+              className="estimation-currency"
+            >
+              $
+            </span>
+            <Input
+              id="budget"
+              inputMode="decimal"
+              value={formatBudgetDisplay(budget)}
+              onChange={(event) => setBudget(sanitizeBudgetInput(event.target.value))}
+              placeholder="Monto disponible, $"
+              disabled={pending}
+              aria-describedby="budget-help"
+              className="estimation-budget-input"
+            />
+          </div>
+          <p id="budget-help" className="estimation-help">
+            Queda guardado en el proyecto, en dólares.
+          </p>
+        </div>
+      </div>
+
+      <div className="estimation-field estimation-problem">
+        <Label htmlFor="problem_text" className="estimation-label">
+          Problema vectorial
+        </Label>
+        <Textarea
+          id="problem_text"
+          name="problem_text"
+          required
+          minLength={8}
+          rows={8}
+          placeholder="Describe el sistema: qué variables intervienen, qué restricciones tienes y qué necesitas resolver. AgentA extrae las ecuaciones automáticamente por ti..."
+          disabled={pending}
+          aria-describedby="problem-help"
+          className="estimation-problem-input"
+        />
+        <p id="problem-help" className="estimation-help">
+          El agente interpreta lenguaje natural; no hace falta escribir solo números.
+        </p>
+      </div>
+
+      <div className="estimation-submit-area">
+        {state?.error ? (
+          <ErrorNotice title="No se pudo generar la estimación">
+            {state.error}
+          </ErrorNotice>
+        ) : null}
+
+        {pending ? (
+          <p
+            className="estimation-pending"
+            aria-live="polite"
+            role="status"
+          >
+            El agente está diagnosticando y resolviendo el sistema. Puede tardar
+            cerca de un minuto.
+          </p>
+        ) : null}
+
+        <Button
+          type="submit"
+          disabled={pending}
+          className="estimation-submit"
+        >
+          {pending ? (
+            <>
+              <Loader2 className="size-4 animate-spin" aria-hidden />
+              Calculando...
+            </>
+          ) : (
+            "Enviar al agente"
+          )}
+        </Button>
+      </div>
+    </form>
   );
 }

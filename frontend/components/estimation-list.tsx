@@ -10,28 +10,26 @@ export function EstimationList({
   estimations: EstimationSummary[];
 }) {
   return (
-    <Sheet>
-      <ul className="divide-y divide-ink/10">
+    <Sheet className="history-register">
+      <ul className="divide-y divide-border">
         {estimations.map((item) => (
           <li key={item.id}>
             <Link
               href={`/estimaciones/${item.id}`}
-              className="block px-4 py-3.5 hover:bg-paper/80"
+              className="history-entry"
             >
-              <span className="flex items-baseline justify-between gap-3">
-                <span className="truncate text-sm font-medium text-ink">
-                  {item.project_name}
-                </span>
                 <time
                   dateTime={item.created_at}
-                  className="shrink-0 font-mono text-[11px] text-steel"
+                  className="history-date"
                 >
                   {formatWhen(item.created_at)}
                 </time>
-              </span>
-              <p className="mt-1 text-sm text-steel">
-                {excerpt(item.problem_text)}
-              </p>
+              <div className="history-copy">
+                <span className="project-name text-ink">{item.project_name}</span>
+                <p className="mt-2 text-sm text-steel">
+                  {excerpt(item.problem_text)}
+                </p>
+              </div>
             </Link>
           </li>
         ))}

@@ -88,7 +88,7 @@ function StatusAndBudget({ project }: { project: Project }) {
   return (
     <span className="inline-flex items-center gap-3">
       <StatusDot status={project.status} />
-      <span className="font-mono text-[11px] text-steel">
+      <span className="text-sm tabular-nums text-steel">
         {formatBudget(project.budget)}
       </span>
     </span>

@@ -1,5 +1,6 @@
 """Endpoint de informes: autenticación Clerk y delegación en `generate_reports`."""
 
+import threading
 from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
@@ -9,11 +10,14 @@ from fastapi.testclient import TestClient
 from app.db.supabase import get_supabase_client
 from app.main import app
 from app.models.report import ReportFile, ReportGenerationResponse
+from app.services.markdown_blocks import parse_markdown
 from app.services.report_generator import (
     EstimationIncompleteError,
     EstimationNotFoundError,
+    mock_pdf_renderer,
 )
 from tests.auth_utils import FakeJWKSClient, generate_keypair, sign_token
+from tests.test_report_generator import _estimation_row
 
 PRIVATE_KEY, PUBLIC_KEY = generate_keypair()
 
@@ -101,6 +105,71 @@ def test_report_missing_estimation_is_not_found(
     mock_generate.side_effect = EstimationNotFoundError("No existe la estimación")
     response = client.post(REPORT_URL, headers=auth_header())
     assert response.status_code == 404
+
+
+def test_report_http_request_records_whether_parse_runs_on_the_main_thread(
+    supabase, monkeypatch
+) -> None:
+    """El request HTTP real, no una llamada directa a parse_markdown."""
+    row = _estimation_row(
+        A=[[2.0, 1.0], [1.0, 3.0]],
+        B=[4.0, 5.0],
+        final_response="## Diagnóstico\n\nEl sistema es **determinado**.\n",
+        project_name="Hilo",
+    )
+    row["id"] = str(ESTIMATION_ID)
+    select = (
+        supabase.table.return_value.select.return_value.eq.return_value.limit.return_value
+    )
+    select.execute.side_effect = [
+        MagicMock(data=[EMPLOYEE_ROW]),
+        MagicMock(data=[row]),
+    ]
+    generated = "2026-09-21T22:00:00+00:00"
+    supabase.table.return_value.insert.return_value.execute.return_value = MagicMock(
+        data=[
+            {
+                "id": str(uuid4()),
+                "file_type": "docx",
+                "file_url": "https://signed.example/informe.docx",
+                "generated_at": generated,
+            },
+            {
+                "id": str(uuid4()),
+                "file_type": "pdf",
+                "file_url": "https://signed.example/informe.pdf",
+                "generated_at": generated,
+            },
+        ]
+    )
+    bucket = supabase.storage.from_.return_value
+
+    def _signed(path: str, _ttl: int, options=None):
+        name = str(path).rsplit("/", 1)[-1]
+        return {"signedURL": f"https://signed.example/{name}"}
+
+    bucket.create_signed_url.side_effect = _signed
+    monkeypatch.setattr(
+        "app.services.report_generator.render_pdf",
+        lambda html, renderer=None: mock_pdf_renderer(html),
+    )
+
+    seen: dict[str, object] = {}
+    real_parse = parse_markdown
+
+    def wrapped(text: str):
+        seen["is_main"] = threading.current_thread() is threading.main_thread()
+        seen["thread"] = threading.current_thread().name
+        return real_parse(text)
+
+    monkeypatch.setattr("app.services.report_generator.parse_markdown", wrapped)
+
+    direct_main = threading.current_thread() is threading.main_thread()
+    response = client.post(REPORT_URL, headers=auth_header())
+
+    assert response.status_code == 200, response.text
+    assert direct_main is True
+    assert seen["is_main"] is False, seen
 
 
 @patch("app.api.estimations.generate_reports")

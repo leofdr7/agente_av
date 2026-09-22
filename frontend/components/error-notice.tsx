@@ -15,7 +15,7 @@ export function ErrorNotice({
     <div
       role="alert"
       className={cn(
-        "border-l-[3px] border-destructive bg-sheet px-3 py-2 text-sm dark:bg-destructive/15",
+        "border-l-4 border-destructive bg-[var(--alert-soft)] px-5 py-4 text-sm leading-relaxed",
         className,
       )}
     >

@@ -1,5 +1,7 @@
 import type { AgentRunTrace, ToolCallRecord } from "@/lib/api";
+import { BookOpen, Brackets, ChevronDown, Rows3, ScanLine, Sigma } from "lucide-react";
 import { cn } from "cn";
+import "./calculation-design.css";
 
 const TOOL_TITLE: Record<string, string> = {
   buscar_conocimiento: "Consulta al vault",
@@ -23,32 +25,33 @@ const WORKING_MATRIX: Record<string, string> = {
 export function CalculationSteps({ trace }: { trace: AgentRunTrace }) {
   if (!trace.tools.length) {
     return (
-      <p className="text-sm text-steel">
+      <p className="calculation-empty">
         Esta corrida no dejó pasos de cálculo en la traza.
       </p>
     );
   }
 
   return (
-    <ol className="divide-y divide-ink/10 border-y border-ink/10">
+    <ol className="calculation-tools">
       {trace.tools.map((tool, index) => (
-        <li key={`${tool.name}-${index}`}>
-          <details className="group">
-            <summary className="flex cursor-pointer list-none items-baseline gap-3 px-1 py-3 marker:content-none [&::-webkit-details-marker]:hidden">
-              <span className="font-mono text-sm text-copper">
-                {String(index + 1).padStart(2, "0")}
+        <li key={`${tool.name}-${index}`} data-tool={tool.name}>
+          <details className="calculation-panel">
+            <summary className="calculation-summary">
+              <span className="calculation-tool-symbol" aria-hidden="true">
+                <ToolSymbol name={tool.name} />
               </span>
-              <span className="flex-1 text-sm font-medium text-ink">
+              <span className="calculation-tool-title">
                 {TOOL_TITLE[tool.name] ?? tool.name}
                 {tool.is_error ? (
-                  <span className="ml-2 font-normal text-destructive">
+                  <span className="calculation-tool-error">
                     no completó
                   </span>
                 ) : null}
               </span>
               <StepCount tool={tool} />
+              <ChevronDown className="calculation-chevron" aria-hidden="true" />
             </summary>
-            <div className="pb-6 pl-10 pr-1 text-sm text-ink/90">
+            <div className="calculation-body">
               <ToolBody tool={tool} />
             </div>
           </details>
@@ -58,11 +61,23 @@ export function CalculationSteps({ trace }: { trace: AgentRunTrace }) {
   );
 }
 
+function ToolSymbol({ name }: { name: string }) {
+  const symbols = {
+    buscar_conocimiento: BookOpen,
+    diagnosticar_sistema: ScanLine,
+    resolver_por_gauss: Sigma,
+    resolver_por_gauss_jordan: Rows3,
+    resolver_por_matriz_inversa: Brackets,
+  };
+  const Symbol = symbols[name as keyof typeof symbols] ?? Brackets;
+  return <Symbol />;
+}
+
 function StepCount({ tool }: { tool: ToolCallRecord }) {
   const steps = asRecord(tool.output)?.steps;
   if (!Array.isArray(steps) || steps.length === 0) return null;
   return (
-    <span className="font-mono text-[11px] text-steel">
+    <span className="calculation-count">
       {steps.length} {steps.length === 1 ? "operación" : "operaciones"}
     </span>
   );
@@ -72,7 +87,7 @@ function ToolBody({ tool }: { tool: ToolCallRecord }) {
   const output = asRecord(tool.output);
   if (!output) {
     return (
-      <pre className="overflow-x-auto font-mono text-xs whitespace-pre-wrap">
+      <pre className="calculation-raw">
         {stringify(tool.output)}
       </pre>
     );
@@ -80,15 +95,15 @@ function ToolBody({ tool }: { tool: ToolCallRecord }) {
 
   if (tool.name === "diagnosticar_sistema") {
     return (
-      <div className="space-y-3">
-        <dl className="grid max-w-md grid-cols-[auto_1fr] gap-x-6 gap-y-2">
+      <div className="calculation-diagnosis">
+        <dl className="calculation-diagnostic-values">
           <Row label="clasificación" value={classification(output.classification)} />
           <Row label="det(A)" value={str(output.determinant)} />
           <Row label="rango(A)" value={str(output.rank_a)} />
           <Row label="rango([A|B])" value={str(output.rank_augmented)} />
         </dl>
         {typeof output.message === "string" ? (
-          <p className="max-w-prose leading-relaxed text-steel">{output.message}</p>
+          <p className="calculation-note">{output.message}</p>
         ) : null}
       </div>
     );
@@ -105,26 +120,26 @@ function ToolBody({ tool }: { tool: ToolCallRecord }) {
   const size = Array.isArray(solution) ? solution.length : undefined;
 
   return (
-    <div className="space-y-5">
+    <div className="calculation-method">
       {diagnosis && typeof diagnosis.message === "string" ? (
-        <p className="max-w-prose leading-relaxed text-steel">{diagnosis.message}</p>
+        <p className="calculation-note">{diagnosis.message}</p>
       ) : null}
 
       {Array.isArray(solution) ? (
-        <div className="border-l-[3px] border-copper pl-3">
-          <p className="text-[11px] text-steel">Vector solución</p>
-          <p className="mt-0.5 font-mono tabular-nums text-ink">
+        <div className="calculation-solution">
+          <p className="calculation-solution-label">Vector solución</p>
+          <p className="calculation-vector font-mono">
             X = ({solution.map((value) => formatNumber(value)).join(", ")})
           </p>
         </div>
       ) : null}
 
       {caption && steps.length > 0 ? (
-        <p className="max-w-prose text-xs leading-relaxed text-steel">{caption}</p>
+        <p className="calculation-caption">{caption}</p>
       ) : null}
 
       {steps.length > 0 ? (
-        <ol className="space-y-4">
+        <ol className="calculation-operations">
           {steps.map((step, index) => {
             const record = asRecord(step);
             const description =
@@ -132,12 +147,12 @@ function ToolBody({ tool }: { tool: ToolCallRecord }) {
                 ? record.description
                 : stringify(step);
             return (
-              <li key={index} className="space-y-1.5">
-                <div className="flex items-baseline gap-2">
-                  <span className="font-mono text-[11px] text-steel">
+              <li key={index} className="calculation-operation">
+                <div className="calculation-operation-heading">
+                  <span className="calculation-operation-number">
                     {String(index + 1).padStart(2, "0")}
                   </span>
-                  <span className="font-medium text-ink">{description}</span>
+                  <span className="calculation-operation-description">{description}</span>
                 </div>
                 <Matrix matrix={asMatrix(record?.matrix_state)} split={size} />
               </li>
@@ -147,16 +162,16 @@ function ToolBody({ tool }: { tool: ToolCallRecord }) {
       ) : null}
 
       {inverse ? (
-        <div className="space-y-1.5">
-          <p className="font-medium text-ink">Matriz inversa A⁻¹</p>
+        <div className="calculation-inverse">
+          <p className="calculation-subheading">Matriz inversa A⁻¹</p>
           <Matrix matrix={inverse} />
         </div>
       ) : null}
 
       {components.length > 0 ? (
-        <div className="space-y-1.5">
-          <p className="font-medium text-ink">Despeje de las componentes de X</p>
-          <ul className="space-y-1 font-mono text-xs tabular-nums text-steel">
+        <div className="calculation-components">
+          <p className="calculation-subheading">Despeje de las componentes de X</p>
+          <ul className="calculation-equations font-mono">
             {components.map((item, index) => {
               const record = asRecord(item);
               if (!record) return null;
@@ -172,7 +187,7 @@ function ToolBody({ tool }: { tool: ToolCallRecord }) {
       ) : null}
 
       {!solution && steps.length === 0 ? (
-        <pre className="overflow-x-auto font-mono text-xs whitespace-pre-wrap text-steel">
+        <pre className="calculation-raw">
           {stringify(tool.output)}
         </pre>
       ) : null}
@@ -192,26 +207,33 @@ function Matrix({
   const bar = split && matrix[0] && split < matrix[0].length ? split : null;
 
   return (
-    <div className="overflow-x-auto">
-      <table className="border-y border-ink/15 font-mono text-xs tabular-nums">
-        <tbody>
-          {matrix.map((row, i) => (
-            <tr key={i} className="border-b border-ink/10 last:border-0">
-              {row.map((value, j) => (
-                <td
-                  key={j}
-                  className={cn(
-                    "px-2 py-1 text-right text-ink/90",
-                    j === bar && "border-l border-ink/30",
-                  )}
-                >
-                  {formatNumber(value)}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div
+      className="calculation-matrix-scroll"
+      tabIndex={0}
+      role="region"
+      aria-label="Matriz de trabajo, desplazable horizontalmente"
+    >
+      <div className="calculation-matrix-brackets">
+        <table className="calculation-matrix font-mono" aria-label="Matriz de trabajo">
+          <tbody>
+            {matrix.map((row, i) => (
+              <tr key={i}>
+                {row.map((value, j) => (
+                  <td
+                    key={j}
+                    className={cn(
+                      "calculation-matrix-value",
+                      j === bar && "calculation-matrix-split",
+                    )}
+                  >
+                    {formatNumber(value)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -220,8 +242,8 @@ function Row({ label, value }: { label: string; value: string }) {
   if (!value) return null;
   return (
     <>
-      <dt className="text-steel">{label}</dt>
-      <dd className="font-mono tabular-nums">{value}</dd>
+      <dt className="calculation-diagnostic-label">{label}</dt>
+      <dd className="calculation-diagnostic-value">{value}</dd>
     </>
   );
 }

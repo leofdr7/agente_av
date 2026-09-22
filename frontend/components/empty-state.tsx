@@ -15,9 +15,9 @@ export function EmptyState({
   action?: string;
 }) {
   return (
-    <div className="border border-dashed border-ink/20 bg-sheet/60 px-4 py-10">
-      <p className="text-base font-medium text-ink">{title}</p>
-      <p className="mt-1 max-w-md text-sm text-steel">{body}</p>
+    <div className="border-l-[3px] border-primary bg-sheet px-6 py-10 sm:px-10">
+      <p className="text-xl font-medium tracking-tight text-ink">{title}</p>
+      <p className="mt-3 max-w-md text-sm leading-relaxed text-steel">{body}</p>
       {href && action ? (
         <Link href={href} className={cn(buttonVariants(), "mt-5 h-9")}>
           {action}
@@ -26,4 +26,3 @@ export function EmptyState({
     </div>
   );
 }
-

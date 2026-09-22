@@ -5,6 +5,7 @@ de documento inyectan `mock_pdf_renderer` (marcado explícitamente en los bytes
 con `MOCK WeasyPrint`); no se omiten en silencio.
 """
 
+import time
 from io import BytesIO
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
@@ -30,6 +31,7 @@ from app.services.linear_systems_engine import (
     validate_system,
     verify_solution,
 )
+from app.services.markdown_blocks import Paragraph, Table, parse_markdown, spans_text
 from app.services.report_generator import (
     EstimationIncompleteError,
     EstimationNotFoundError,
@@ -417,6 +419,67 @@ def test_panaderia_gauss_jordan_y_la_inversa_no_comparten_la_matriz() -> None:
             if borders is not None and 'w:sz="16"' in borders.xml:
                 barred += 1
     assert barred > 0
+
+
+def _parse_within_a_second(text: str) -> list:
+    started = time.perf_counter()
+    blocks = parse_markdown(text)
+    assert time.perf_counter() - started < 1.0
+    return blocks
+
+
+def _joined(blocks: list) -> str:
+    parts: list[str] = []
+    for block in blocks:
+        if isinstance(block, Paragraph):
+            parts.append(spans_text(block.spans))
+        elif isinstance(block, Table):
+            parts.append(spans_text(block.header[0]) if block.header else "")
+    return "\n".join(parts)
+
+
+def test_parse_frase_con_barras_de_matriz_no_se_cuelga() -> None:
+    """La prosa que colgó el informe: [A|B] y [I|X] no son una tabla."""
+    text = (
+        "Reduce [A|B] hasta [I|X] con operaciones de escalado y eliminación "
+        "en ambas direcciones, llegando directamente a:"
+    )
+    blocks = _parse_within_a_second(text)
+    assert not any(isinstance(block, Table) for block in blocks)
+    assert "Reduce [A|B] hasta [I|X]" in _joined(blocks)
+
+
+def test_parse_multiples_barras_sueltas_no_forman_tabla() -> None:
+    text = "harina | horno | amasado | sobrante | sin separador de tabla"
+    blocks = _parse_within_a_second(text)
+    assert not any(isinstance(block, Table) for block in blocks)
+    assert "harina | horno | amasado" in _joined(blocks)
+
+
+def test_parse_tabla_seguida_de_barra_suelta_no_absorbe_la_prosa() -> None:
+    text = """\
+| Pan | Lotes |
+| --- | --- |
+| pan de caja | 4 |
+Reduce [A|B] hasta [I|X] y esta línea no es una fila.
+"""
+    blocks = _parse_within_a_second(text)
+    tables = [block for block in blocks if isinstance(block, Table)]
+    assert len(tables) == 1
+    assert len(tables[0].rows) == 1
+    assert spans_text(tables[0].rows[0][0]) == "pan de caja"
+    assert any(
+        isinstance(block, Paragraph) and "[A|B]" in spans_text(block.spans)
+        for block in blocks
+    )
+
+
+def test_parse_linea_con_barras_en_los_extremos_sin_gfm() -> None:
+    """Empieza y termina en `|`, pero no hay fila `---` que la vuelva tabla."""
+    text = "|esto no es | una tabla|"
+    blocks = _parse_within_a_second(text)
+    assert not any(isinstance(block, Table) for block in blocks)
+    assert "|esto no es | una tabla|" in _joined(blocks)
 
 
 def test_generate_reports_404_when_estimation_missing() -> None:

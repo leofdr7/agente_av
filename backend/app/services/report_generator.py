@@ -42,6 +42,7 @@ from app.services.markdown_blocks import (
     CodeBlock,
     Heading,
     ListBlock,
+    MarkdownParseError,
     Paragraph,
     Span,
     Table,
@@ -53,7 +54,7 @@ from app.services.markdown_blocks import (
 _APP_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = _APP_DIR / "templates"
 ASSETS_DIR = _APP_DIR / "assets"
-LOGO_PATH = ASSETS_DIR / "logo_placeholder.png"
+LOGO_PATH = ASSETS_DIR / "logo.png"
 
 COMPANY = "AgentA"
 NAVY = RGBColor(0x0F, 0x20, 0x40)
@@ -406,7 +407,7 @@ def render_docx(ctx: ReportContext) -> bytes:
     header = section.header
     paragraph = header.paragraphs[0]
     if LOGO_PATH.exists():
-        paragraph.add_run().add_picture(str(LOGO_PATH), width=Inches(0.45))
+        paragraph.add_run().add_picture(str(LOGO_PATH), width=Inches(0.52))
         paragraph.add_run("  ")
     brand = paragraph.add_run(f"{ctx.company}  ·  Informe de estimación")
     _set_run_font(brand, size=10, bold=True)
@@ -638,7 +639,10 @@ def _project_title(row: dict[str, Any]) -> str:
 
 def _executive_blocks(text: str, fallback: str) -> list[Block]:
     """Resumen del agente ya interpretado; si no dejó nada, un párrafo de aviso."""
-    blocks = parse_markdown(text) if text.strip() else []
+    try:
+        blocks = parse_markdown(text) if text.strip() else []
+    except MarkdownParseError as exc:
+        raise ReportError(str(exc)) from exc
     return blocks or [Paragraph(spans=[Span(fallback)])]
 
 

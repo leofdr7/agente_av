@@ -13,19 +13,17 @@ export function PageHeader({
   children?: ReactNode;
 }) {
   return (
-    <header className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <div className="border-l-[3px] border-copper pl-3">
-        {eyebrow ? (
-          <div className="font-mono text-[11px] text-steel">{eyebrow}</div>
-        ) : null}
-        <h1 className="text-2xl font-medium tracking-tight text-ink">{title}</h1>
+    <header className="page-header flex flex-col lg:flex-row lg:items-end lg:justify-between">
+      <div className="min-w-0">
+        <h1 className="page-title text-ink">{title}</h1>
         {description ? (
-          <p className="mt-3 max-w-prose text-sm font-normal leading-relaxed text-steel">
+          <p className="page-description">
             {description}
           </p>
         ) : null}
+        {eyebrow ? <div className="page-context">{eyebrow}</div> : null}
       </div>
-      {children ? <div className="sm:pb-0.5">{children}</div> : null}
+      {children ? <div className="shrink-0 lg:pb-1">{children}</div> : null}
     </header>
   );
 }
@@ -40,7 +38,7 @@ export function Sheet({
   return (
     <div
       className={cn(
-        "bg-sheet ring-1 ring-ink/10",
+        "sheet",
         className,
       )}
     >

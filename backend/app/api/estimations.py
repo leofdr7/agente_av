@@ -53,6 +53,16 @@ def create_report(
     supabase: Annotated[Client, Depends(get_supabase_client)],
 ) -> ReportGenerationResponse:
     """Genera el DOCX y el PDF de una estimación y devuelve URLs firmadas de descarga."""
+    # #region agent log
+    try:
+        import json
+        import threading
+        import time
+        from pathlib import Path
+        Path("/home/leofdr7/Projects/Agente_algebra_vectorial/.cursor/debug-6e8e27.log").open("a").write(json.dumps({"sessionId":"6e8e27","hypothesisId":"H1","location":"estimations.py:create_report","message":"report endpoint thread","data":{"isMain":threading.current_thread() is threading.main_thread(),"thread":threading.current_thread().name},"timestamp":int(time.time()*1000)})+"\n")
+    except Exception:
+        pass
+    # #endregion
     try:
         return generate_reports(estimation_id, supabase)
     except EstimationNotFoundError as exc:

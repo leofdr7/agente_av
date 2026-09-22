@@ -30,7 +30,7 @@ export function EstimationResult({ estimation }: { estimation: EstimationDetail 
         description="Resumen de la corrida y traza de cálculo."
       />
 
-      <dl className="mb-6 grid grid-cols-2 gap-x-4 gap-y-2 text-sm md:grid-cols-4">
+      <dl className="result-metadata">
         <div>
           <dt className="text-steel">Estado</dt>
           <dd>
@@ -39,14 +39,14 @@ export function EstimationResult({ estimation }: { estimation: EstimationDetail 
         </div>
         <div>
           <dt className="text-steel">Presupuesto</dt>
-          <dd className="font-mono">{formatBudget(estimation.project.budget)}</dd>
+          <dd className="text-lg font-medium">{formatBudget(estimation.project.budget)}</dd>
         </div>
-        <div className="col-span-2">
+        <div>
           <dt className="text-steel">Expediente</dt>
           <dd>
             <Link
               href={`/proyectos/${estimation.project_id}`}
-              className="text-ink underline-offset-2 hover:underline"
+              className="text-primary underline underline-offset-4"
             >
               Ver historial del proyecto
             </Link>
@@ -56,34 +56,36 @@ export function EstimationResult({ estimation }: { estimation: EstimationDetail 
 
       {alert ? <DiagnosisBanner alert={alert} /> : null}
 
-      <Sheet className="mb-8 px-4 py-4">
-        <h2 className="text-sm font-medium text-ink">Enunciado</h2>
-        <p className="mt-2 whitespace-pre-wrap text-sm text-ink/90">
-          {estimation.problem_text}
-        </p>
-      </Sheet>
+      <div className="result-overview">
+        <Sheet className="result-statement">
+          <h2 className="section-title text-ink">Enunciado</h2>
+          <p className="whitespace-pre-wrap text-ink">
+            {estimation.problem_text}
+          </p>
+        </Sheet>
 
-      <section className="mb-8">
-        <h2 className="mb-3 flex flex-wrap items-center gap-2 text-sm font-medium text-ink">
-          Resumen ejecutivo
-          {alert ? (
-            <Badge variant="destructive" className="h-5 rounded-md">
-              {alert.title}
-            </Badge>
-          ) : null}
-        </h2>
-        <MarkdownSummary
-          className={cn(
-            "border-l-[3px] pl-4",
-            alert ? "border-destructive" : "border-copper",
-          )}
-        >
-          {summary}
-        </MarkdownSummary>
-      </section>
+        <section className="result-summary">
+          <h2 className="section-title flex flex-wrap items-center gap-2 text-ink">
+            Resumen ejecutivo
+            {alert ? (
+              <Badge variant="destructive" className="alert-label">
+                {alert.title}
+              </Badge>
+            ) : null}
+          </h2>
+          <MarkdownSummary
+            className={cn(
+              "result-prose",
+              alert && "border-l-[3px] border-destructive pl-4",
+            )}
+          >
+            {summary}
+          </MarkdownSummary>
+        </section>
+      </div>
 
-      <section className="mb-8">
-        <h2 className="mb-3 text-sm font-medium text-ink">Pasos de cálculo</h2>
+      <section className="result-calculation">
+        <h2 className="section-title text-ink">Pasos de cálculo</h2>
         {estimation.result_json ? (
           <CalculationSteps trace={estimation.result_json} />
         ) : (
@@ -94,8 +96,8 @@ export function EstimationResult({ estimation }: { estimation: EstimationDetail 
         )}
       </section>
 
-      <section>
-        <h2 className="mb-3 text-sm font-medium text-ink">Informe</h2>
+      <section className="result-reports">
+        <h2 className="section-title text-ink">Informe</h2>
         <DownloadReports
           estimationId={estimation.id}
           initialReports={estimation.reports}
@@ -109,10 +111,10 @@ function DiagnosisBanner({ alert }: { alert: RunAlert }) {
   return (
     <div
       role="status"
-      className="mb-8 border-l-[3px] border-destructive bg-destructive/10 px-3 py-3 dark:bg-destructive/20"
+      className="diagnosis-alert"
     >
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="destructive" className="h-5 rounded-md">
+        <Badge variant="destructive" className="alert-label">
           {alert.title}
         </Badge>
         <p className="text-sm font-medium text-ink">Diagnóstico de alerta</p>

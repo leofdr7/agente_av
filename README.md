@@ -270,7 +270,9 @@ Historial). En `md` y superior, la misma lista vive en una barra lateral.
 
 La app es instalable (manifest nativo de Next.js + service worker de assets
 estáticos). El service worker **no** se registra con `npm run dev`: hay que
-servir el build de producción.
+servir el build de producción. En desarrollo se retiran registros previos de
+`/sw.js` y las cachés `agenta-static-*`, por si antes se ejecutó producción en
+el mismo origen. No se borran sesiones ni cachés de otras aplicaciones.
 
 ```bash
 cd frontend
@@ -292,10 +294,20 @@ la app ya está en `standalone`, el botón se oculta.
 Comprobaciones rápidas:
 
 - Manifest: `http://localhost:3000/manifest.webmanifest` (nombre, `theme_color` `#1a2332`, iconos 192 y 512).
-- Service worker: Application → Service Workers; cache `agenta-static-v1` con `/_next/static/*` e `/icons/*`.
+- Service worker: Application → Service Workers; caché `agenta-static-v2` para iconos de la PWA.
+- Los recursos `/_next/*` quedan a cargo de Next y la caché HTTP del navegador.
+  Guardarlos con una política cache-first puede mezclar JavaScript anterior
+  con HTML nuevo durante desarrollo y provocar errores de hidratación.
 - No cachea HTML, sesiones de Clerk ni llamadas a FastAPI.
 - El flujo de producto (crear proyecto, agente, informe) exige una sesión de
   Clerk. Sin ella, `/` redirige a `/sign-in`.
+
+Si una pestaña anterior muestra un error de hidratación después de actualizar
+el frontend, usa `Ctrl+Shift+R` para cargar el cliente nuevo y ejecutar la
+limpieza de desarrollo. No se fuerza una recarga automática del formulario.
+
+Pruebas de regresión de caché, desde `frontend`:
+`node --test tests/service-worker.test.mjs`.
 
 ## Autenticación
 

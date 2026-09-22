@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { FolderClosed } from "lucide-react";
 
 import { StatusDot } from "@/components/status-dot";
 import { Sheet } from "@/components/page-header";
@@ -7,21 +8,26 @@ import { formatBudget } from "@/lib/format";
 
 export function ProjectList({ projects }: { projects: Project[] }) {
   return (
-    <Sheet>
-      <ul className="divide-y divide-ink/10">
+    <Sheet className="project-register">
+      <div className="project-register-heading" aria-hidden>
+        <span>Expedientes</span>
+        <span>Presupuesto</span>
+      </div>
+      <ul className="divide-y divide-border border-t border-border">
         {projects.map((project) => (
           <li key={project.id}>
             <Link
               href={`/proyectos/${project.id}`}
-              className="flex items-baseline justify-between gap-4 px-4 py-3.5 hover:bg-paper/80"
+              className="project-row"
             >
+              <FolderClosed className="project-glyph" aria-hidden />
               <span className="min-w-0">
-                <span className="block truncate font-medium text-ink">
+                <span className="project-name text-ink">
                   {project.name}
                 </span>
-                <StatusDot status={project.status} />
+                <span className="mt-2 block"><StatusDot status={project.status} /></span>
               </span>
-              <span className="shrink-0 font-mono text-sm text-steel">
+              <span className="project-budget text-ink">
                 {formatBudget(project.budget)}
               </span>
             </Link>

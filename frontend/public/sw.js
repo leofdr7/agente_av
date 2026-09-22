@@ -1,4 +1,5 @@
-const CACHE_NAME = "agenta-static-v1";
+const CACHE_PREFIX = "agenta-static-";
+const CACHE_NAME = `${CACHE_PREFIX}v3`;
 
 const PRECACHE_URLS = [
   "/icons/icon-48.png",
@@ -24,7 +25,7 @@ self.addEventListener("activate", (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((key) => key !== CACHE_NAME)
+            .filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
             .map((key) => caches.delete(key)),
         ),
       )
@@ -33,11 +34,13 @@ self.addEventListener("activate", (event) => {
 });
 
 function isStaticAsset(requestUrl) {
-  const { pathname, hostname } = new URL(requestUrl);
-  if (hostname !== self.location.hostname) return false;
-  if (pathname.startsWith("/_next/static/")) return true;
+  const { pathname, origin } = new URL(requestUrl);
+  if (origin !== self.location.origin) return false;
+  // Next controls its own versioned assets. In development its chunk URLs can
+  // be reused: cache-first here mixes an old client with newly rendered HTML.
+  if (pathname.startsWith("/_next/")) return false;
   if (pathname.startsWith("/icons/")) return true;
-  return /\.(?:woff2?|ttf|otf|ico|png|svg|webp|jpg|jpeg|gif)$/i.test(pathname);
+  return ["/favicon.ico", "/icon.png", "/apple-icon.png"].includes(pathname);
 }
 
 self.addEventListener("fetch", (event) => {
