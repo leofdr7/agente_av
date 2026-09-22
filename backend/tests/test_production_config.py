@@ -45,3 +45,11 @@ def test_voyage_uses_its_own_key():
     assert production_settings(
         embedding_provider="voyage", voyage_api_key="test-voyage-key", openai_api_key=None,
     ).embedding_provider == "voyage"
+
+
+def test_startup_validation_does_not_log_secret_values():
+    secret = "private-key-must-not-appear-in-startup-logs"
+    with pytest.raises(ValidationError) as caught:
+        production_settings(debug=True, openai_api_key=secret)
+    assert secret not in str(caught.value)
+    assert "input_value" not in str(caught.value)

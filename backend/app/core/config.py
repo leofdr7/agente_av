@@ -8,7 +8,9 @@ JWKS_SUFFIX = "/.well-known/jwks.json"
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", hide_input_in_errors=True,
+    )
 
     app_name: str = "Agente Algebra Vectorial"
     environment: Literal["development", "test", "production"] = "development"
@@ -24,6 +26,7 @@ class Settings(BaseSettings):
     clerk_issuer: str | None = None
     # Orígenes del frontend autorizados a emitir tokens (claim `azp`), separados por coma.
     clerk_authorized_parties: str = "http://localhost:3000"
+
     # RAG / embeddings. Indexación y búsqueda deben usar el mismo proveedor y modelo.
     # Dimensión fija en 512 para coincidir con knowledge_chunks.embedding.
     embedding_provider: Literal["voyage", "openai"] = "voyage"
