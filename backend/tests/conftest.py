@@ -1,5 +1,8 @@
 import os
 
+os.environ.setdefault("ENVIRONMENT", "test")
+os.environ.setdefault("AUTH_DISABLED", "false")
+os.environ.setdefault("DEBUG", "false")
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_KEY", "test-service-key")
 os.environ.setdefault(

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "cn";
@@ -25,16 +25,28 @@ function isIosDevice(): boolean {
   return classic || iPadOs;
 }
 
+function subscribeDisplayMode(onChange: () => void) {
+  const queries = ["(display-mode: standalone)", "(display-mode: fullscreen)"]
+    .map((query) => window.matchMedia(query));
+  queries.forEach((query) => query.addEventListener("change", onChange));
+  window.addEventListener("appinstalled", onChange);
+  return () => {
+    queries.forEach((query) => query.removeEventListener("change", onChange));
+    window.removeEventListener("appinstalled", onChange);
+  };
+}
+
+const subscribeDevice = () => () => {};
+const serverStandalone = () => true;
+const serverIos = () => false;
+
 export function InstallAppButton({ className }: { className?: string }) {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
-  const [standalone, setStandalone] = useState(true);
-  const [ios, setIos] = useState(false);
+  const standalone = useSyncExternalStore(subscribeDisplayMode, isStandaloneDisplay, serverStandalone);
+  const ios = useSyncExternalStore(subscribeDevice, isIosDevice, serverIos);
   const [hintOpen, setHintOpen] = useState(false);
 
   useEffect(() => {
-    setStandalone(isStandaloneDisplay());
-    setIos(isIosDevice());
-
     const onPrompt = (event: Event) => {
       event.preventDefault();
       setDeferred(event as BeforeInstallPromptEvent);

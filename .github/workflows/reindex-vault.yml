@@ -15,6 +15,7 @@ name: Reindex Obsidian vault
 
 on:
   push:
+    branches: [main]
     paths:
       - "vault/**"
       - "backend/scripts/index_vault.py"
@@ -35,7 +36,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
       - name: Install dependencies
         run: pip install -r requirements.txt
       - name: Index vault
@@ -45,4 +46,6 @@ jobs:
           VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           CLERK_JWKS_URL: ${{ secrets.CLERK_JWKS_URL }}
+          EMBEDDING_PROVIDER: ${{ vars.EMBEDDING_PROVIDER || 'openai' }}
+          EMBEDDING_MODEL: ${{ vars.EMBEDDING_MODEL }}
         run: python scripts/index_vault.py

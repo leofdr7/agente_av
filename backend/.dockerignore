@@ -2,6 +2,12 @@
 __pycache__
 .pytest_cache
 .mypy_cache
-.env
+.env*
+tests/
+scripts/
+migrations/
+.git/
+.coverage
+htmlcov/
 *.pyc
 *.pyo

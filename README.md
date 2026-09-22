@@ -5,7 +5,7 @@ Monorepo con backend FastAPI y frontend Next.js para estimaciones basadas en pre
 ## Estructura
 
 ```
-├── backend/          # FastAPI (Python 3.11+)
+├── backend/          # FastAPI (Python 3.12+)
 ├── frontend/         # Next.js 16 (App Router, TypeScript, Tailwind, shadcn/ui, Clerk)
 ├── vault/            # Base de conocimiento del despliegue (vacía en el repo)
 ├── vault-ejemplo/    # Notas de demostración; no se indexan en producción
@@ -14,8 +14,8 @@ Monorepo con backend FastAPI y frontend Next.js para estimaciones basadas en pre
 
 ## Prerrequisitos
 
-- Python 3.11+
-- Node.js 20+
+- Python 3.12+ (CI y contenedor: 3.12)
+- Node.js 24 LTS (ver frontend/.nvmrc)
 - Docker (opcional, para backend en contenedor)
 - Una aplicación en [Clerk](https://clerk.com) (ver [Autenticación](#autenticación))
 
@@ -27,7 +27,7 @@ Monorepo con backend FastAPI y frontend Next.js para estimaciones basadas en pre
 cd backend
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 cp .env.example .env
 uvicorn app.main:app --reload
 ```
@@ -396,3 +396,12 @@ Tests del backend (incluyen verificación JWT y sincronización de empleados):
 ```bash
 cd backend && pytest
 ```
+
+## Producción y CI/CD (fase 10)
+
+La [guía de producción](docs/PRODUCTION.md) incluye el bootstrap de GCP, Secret
+Manager, Workload Identity Federation, despliegue de Cloud Run, conexión de Vercel
+con GitHub, variables, dominio propio con HTTPS, verificación y rollback.
+Los workflows `ci.yml` y `deploy-production.yml` ejecutan las comprobaciones antes
+de publicar cada merge a `main`. Se requieren las cuentas, claves y DNS descritos
+en la guía para activar los recursos remotos.
