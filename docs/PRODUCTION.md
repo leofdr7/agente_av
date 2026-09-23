@@ -1,5 +1,10 @@
 # Despliegue: Cloud Run + Vercel
 
+> Guía histórica de la arquitectura GCP. El workflow actual despliega el backend
+> en AWS ECR/ECS; consulta [Producción y CI/CD](../README.md#producción-y-cicd)
+> para las variables y el procedimiento vigentes. No ejecutar este bootstrap
+> para el pipeline AWS.
+
 Esta guía y los scripts configuran el repositorio `leofdr7/agente_av`. Crear estos
 archivos **no crea recursos remotos**: el despliegue solo queda completado después
 de ejecutar el bootstrap, cargar las claves, publicar y verificar el sitio.
