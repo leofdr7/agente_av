@@ -403,9 +403,16 @@ cd backend && pytest
 esas mismas comprobaciones, construye el backend para `linux/amd64`, publica la
 imagen en ECR y registra una revisión de la task definition del servicio ECS
 Express Mode. Espera a que `agenta-backend-smoke` quede activo con esa revisión y
-comprueba `/health/live`. En `main` continúa el despliegue de Vercel con la URL
-obtenida de ECS. Un `workflow_dispatch` desde una rama solo despliega el backend
-smoke; no publica el frontend en Vercel.
+comprueba `/health/live`. En `main` continúa el despliegue de Vercel, que toma
+`NEXT_PUBLIC_API_URL` de la variable **Production** del proyecto `agente-av`.
+El workflow no le pasa la URL generada por ECS. Un `workflow_dispatch` desde una
+rama solo despliega el backend smoke; no publica el frontend en Vercel.
+
+Mientras se pospone un dominio propio, `NEXT_PUBLIC_API_URL` debe contener la URL
+HTTPS actual del servicio ECS Express Mode. Si se recrea el servicio y cambia su
+hostname, actualiza esta variable en Vercel y vuelve a desplegar el frontend;
+Next.js incorpora las variables `NEXT_PUBLIC_` al compilar. El cliente llama al
+backend directamente y no usa un rewrite de Vercel.
 
 Configurar estas **variables del GitHub Environment `production`** antes de usar
 el workflow:
