@@ -1,0 +1,83 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "EcrLogin",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Sid": "PushAndPullBackendImage",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:BatchGetImage",
+        "ecr:CompleteLayerUpload",
+        "ecr:DescribeImages",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:InitiateLayerUpload",
+        "ecr:PutImage",
+        "ecr:UploadLayerPart"
+      ],
+      "Resource": "arn:aws:ecr:us-east-2:964862484349:repository/agenta-backend"
+    },
+    {
+      "Sid": "ReadTargetExpressService",
+      "Effect": "Allow",
+      "Action": [
+        "ecs:DescribeExpressGatewayService",
+        "ecs:DescribeServices"
+      ],
+      "Resource": "arn:aws:ecs:us-east-2:964862484349:service/default/agenta-backend-smoke"
+    },
+    {
+      "Sid": "ReadTaskDefinition",
+      "Effect": "Allow",
+      "Action": "ecs:DescribeTaskDefinition",
+      "Resource": "*"
+    },
+    {
+      "Sid": "RegisterBackendTaskDefinition",
+      "Effect": "Allow",
+      "Action": "ecs:RegisterTaskDefinition",
+      "Resource": "arn:aws:ecs:us-east-2:964862484349:task-definition/default-agenta-backend-smoke:*"
+    },
+    {
+      "Sid": "DeployOnlyBackendExpressService",
+      "Effect": "Allow",
+      "Action": "ecs:UpdateExpressGatewayService",
+      "Resource": "arn:aws:ecs:us-east-2:964862484349:service/default/agenta-backend-smoke",
+      "Condition": {
+        "ArnLike": {
+          "ecs:task-definition": "arn:aws:ecs:us-east-2:964862484349:task-definition/default-agenta-backend-smoke:*"
+        }
+      }
+    },
+    {
+      "Sid": "PassOnlyExistingTaskExecutionRole",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::964862484349:role/ecsTaskExecutionRole",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "ecs-tasks.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "ReadOnlyNamedProductionSecrets",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:GetSecretValue"
+      ],
+      "Resource": [
+        "arn:aws:secretsmanager:us-east-2:964862484349:secret:agenta/production/ANTHROPIC_API_KEY-??????",
+        "arn:aws:secretsmanager:us-east-2:964862484349:secret:agenta/production/SUPABASE_SERVICE_KEY-??????",
+        "arn:aws:secretsmanager:us-east-2:964862484349:secret:agenta/production/CLERK_SECRET_KEY-??????",
+        "arn:aws:secretsmanager:us-east-2:964862484349:secret:agenta/production/OPENAI_API_KEY-??????"
+      ]
+    }
+  ]
+}

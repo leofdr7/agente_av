@@ -1,0 +1,24 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "GitHubProductionMainOnly",
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::964862484349:oidc-provider/token.actions.githubusercontent.com"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+          "token.actions.githubusercontent.com:sub": "repo:leofdr7@261961715/agente_av@1372394791:environment:production",
+          "token.actions.githubusercontent.com:repository": "leofdr7/agente_av",
+          "token.actions.githubusercontent.com:repository_id": "1372394791",
+          "token.actions.githubusercontent.com:repository_owner_id": "261961715",
+          "token.actions.githubusercontent.com:ref": "refs/heads/main",
+          "token.actions.githubusercontent.com:environment": "production"
+        }
+      }
+    }
+  ]
+}

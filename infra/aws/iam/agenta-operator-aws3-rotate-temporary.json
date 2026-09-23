@@ -1,0 +1,16 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "RotateOnlyFourAws3Secrets",
+      "Effect": "Allow",
+      "Action": "secretsmanager:PutSecretValue",
+      "Resource": [
+        "arn:aws:secretsmanager:us-east-2:964862484349:secret:agenta/production/ANTHROPIC_API_KEY-2djLT2",
+        "arn:aws:secretsmanager:us-east-2:964862484349:secret:agenta/production/SUPABASE_SERVICE_KEY-vgfbij",
+        "arn:aws:secretsmanager:us-east-2:964862484349:secret:agenta/production/CLERK_SECRET_KEY-CLXzgJ",
+        "arn:aws:secretsmanager:us-east-2:964862484349:secret:agenta/production/OPENAI_API_KEY-D4NMbi"
+      ]
+    }
+  ]
+}
