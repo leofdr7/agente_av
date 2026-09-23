@@ -431,8 +431,14 @@ activa en ECS. El rol OIDC de AWS-1 y la política de ramas del entorno
 `production` aceptan actualmente solo `main`: para esta prueba hay que permitir
 temporalmente la rama en **ambas** reglas y restaurarlas al terminar. GitHub
 requiere además que el archivo del workflow exista en la rama predeterminada
-para habilitar `workflow_dispatch`; la primera prueba necesitará un mecanismo
-de arranque que no publique este workflow en `main`.
+para habilitar `workflow_dispatch`. Una forma de probar sin mergear es añadir
+temporalmente `refs/heads/codex/production-cicd` a la condición `ref` del trust
+policy del rol, permitir esa rama en el entorno `production` y seleccionarla
+temporalmente como rama predeterminada. Ejecutar `workflow_dispatch` con
+`--ref codex/production-cicd`; al terminar, restaurar `main` como rama
+predeterminada, la política de ramas y el trust policy original. El perfil
+`agenta-operator` no tiene permisos para modificar el trust policy: este paso
+requiere un administrador IAM.
 
 La [guía de producción anterior](docs/PRODUCTION.md) describe la infraestructura
 GCP ya reemplazada. La [configuración IAM de AWS](infra/aws/iam/README.md)

@@ -55,7 +55,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           allowed-account-ids: '964862484349'
       - name: Confirm AWS CLI supports ECS Express Mode
-        run: aws ecs update-express-gateway-service help >/dev/null
+        run: aws ecs update-express-gateway-service --generate-cli-skeleton input >/dev/null
       - name: ECR login
         run: |
           registry="964862484349.dkr.ecr.$AWS_REGION.amazonaws.com"
