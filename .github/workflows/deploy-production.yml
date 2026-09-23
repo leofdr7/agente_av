@@ -28,8 +28,6 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    outputs:
-      url: ${{ steps.verify.outputs.url }}
     env:
       AWS_REGION: us-east-2
       AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
@@ -132,7 +130,6 @@ jobs:
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      NEXT_PUBLIC_API_URL: ${{ needs.backend.outputs.url }}
       NEXT_TELEMETRY_DISABLED: '1'
     steps:
       - uses: actions/checkout@v7.0.1
@@ -141,18 +138,32 @@ jobs:
           node-version-file: frontend/.nvmrc
       - name: Validate Vercel target
         run: |
-          for name in VERCEL_ORG_ID VERCEL_PROJECT_ID VERCEL_TOKEN NEXT_PUBLIC_API_URL; do
+          for name in VERCEL_ORG_ID VERCEL_PROJECT_ID VERCEL_TOKEN; do
             if [ -z "${!name}" ]; then echo "Missing production setting: $name" >&2; exit 1; fi
           done
       - run: npm install --global vercel@59.25.2
+      - name: Verify configured backend URL in Vercel
+        run: |
+          vercel env run -e production --project="$VERCEL_PROJECT_ID" \
+            --scope="$VERCEL_ORG_ID" --token="$VERCEL_TOKEN" -- \
+            node -e '
+              const value = process.env.NEXT_PUBLIC_API_URL;
+              if (!value) throw new Error("Missing NEXT_PUBLIC_API_URL in Vercel Production");
+              const url = new URL(value);
+              if (url.protocol !== "https:" || url.pathname !== "/" || url.search || url.hash) {
+                throw new Error("NEXT_PUBLIC_API_URL must be an HTTPS origin");
+              }
+              fetch(`${url.origin}/health/live`).then((response) => {
+                if (!response.ok) throw new Error(`Backend health returned ${response.status}`);
+                console.log(`Backend ready at ${url.origin}`);
+              }).catch((error) => { console.error(error); process.exitCode = 1; });
+            '
       # Ejecutar desde raíz: el proyecto de Vercel tiene Root Directory=frontend.
       # Vercel conserva CLERK_SECRET_KEY: env pull devuelve [SENSITIVE].
       - name: Build and publish production on Vercel
         id: deploy
         run: |
           url=$(vercel deploy --prod --yes --token="$VERCEL_TOKEN" \
-            --project="$VERCEL_PROJECT_ID" --scope="$VERCEL_ORG_ID" \
-            --build-env="NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL" \
-            --env="NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL")
+            --project="$VERCEL_PROJECT_ID" --scope="$VERCEL_ORG_ID")
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Frontend: $url" >> "$GITHUB_STEP_SUMMARY"
