@@ -397,13 +397,43 @@ Tests del backend (incluyen verificación JWT y sincronización de empleados):
 cd backend && pytest
 ```
 
-## Producción y CI/CD (fase 10)
+## Producción y CI/CD
 
-La [guía de producción](docs/PRODUCTION.md) incluye el bootstrap de GCP, Secret
-Manager, Workload Identity Federation, despliegue de Cloud Run, conexión de Vercel
-con GitHub, variables, subdominio de Vercel con HTTPS, verificación y rollback.
-El lanzamiento inicial usa Clerk Development como piloto; la guía explica el
-paso posterior a Clerk Production con dominio propio y la migración de identidades.
-Los workflows `ci.yml` y `deploy-production.yml` ejecutan las comprobaciones antes
-de publicar cada merge a `main`. Se requieren las cuentas, claves y DNS descritos
-en la guía para activar los recursos remotos.
+`ci.yml` conserva tests, lint y build en cada PR. `deploy-production.yml` ejecuta
+esas mismas comprobaciones, construye el backend para `linux/amd64`, publica la
+imagen en ECR y registra una revisión de la task definition del servicio ECS
+Express Mode. Espera a que `agenta-backend-smoke` quede activo con esa revisión y
+comprueba `/health/live`. En `main` continúa el despliegue de Vercel con la URL
+obtenida de ECS. Un `workflow_dispatch` desde una rama solo despliega el backend
+smoke; no publica el frontend en Vercel.
+
+Configurar estas **variables del GitHub Environment `production`** antes de usar
+el workflow:
+
+| Variable | Valor esperado |
+| --- | --- |
+| `AWS_ROLE_ARN` | `arn:aws:iam::964862484349:role/agenta-deploy-role` (OIDC de AWS-1) |
+| `ECR_REPOSITORY` | `agenta-backend` |
+| `ECS_CLUSTER` | `default` |
+| `ECS_SERVICE` | `agenta-backend-smoke` |
+
+La región es `us-east-2`. El workflow usa el token OIDC de GitHub para asumir el
+rol; **no requiere AWS access keys** ni secretos de AWS en GitHub. El despliegue
+de Vercel en `main` conserva `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` (variables) y
+`VERCEL_TOKEN` (secret). Las variables antiguas de GCP (`GCP_PROJECT_ID`,
+`GCP_REGION`, `CLOUD_RUN_SERVICE`, `GCP_DEPLOY_SERVICE_ACCOUNT`,
+`GCP_RUNTIME_SERVICE_ACCOUNT`, `GCP_WORKLOAD_IDENTITY_PROVIDER` y
+`ARTIFACT_REGISTRY_REPOSITORY`) ya no se usan.
+
+Antes de mergear a `main`, ejecutar `workflow_dispatch` sobre una rama de prueba
+y confirmar en la ejecución que la imagen está en ECR y la nueva revisión queda
+activa en ECS. El rol OIDC de AWS-1 y la política de ramas del entorno
+`production` aceptan actualmente solo `main`: para esta prueba hay que permitir
+temporalmente la rama en **ambas** reglas y restaurarlas al terminar. GitHub
+requiere además que el archivo del workflow exista en la rama predeterminada
+para habilitar `workflow_dispatch`; la primera prueba necesitará un mecanismo
+de arranque que no publique este workflow en `main`.
+
+La [guía de producción anterior](docs/PRODUCTION.md) describe la infraestructura
+GCP ya reemplazada. La [configuración IAM de AWS](infra/aws/iam/README.md)
+documenta el rol OIDC y los permisos limitados al servicio smoke.
