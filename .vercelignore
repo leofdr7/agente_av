@@ -1,0 +1,9 @@
+# El proyecto remoto usa Root Directory=frontend. Solo se publica su código.
+/*
+!frontend
+frontend/node_modules
+frontend/.next
+frontend/.vercel
+frontend/.env*
+frontend/coverage
+frontend/*.tsbuildinfo

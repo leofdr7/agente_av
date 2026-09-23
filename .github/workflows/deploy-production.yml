@@ -1,0 +1,158 @@
+name: Deploy production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+
+  backend:
+    name: Deploy ECS smoke service
+    needs: checks
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment:
+      name: production
+      url: ${{ steps.verify.outputs.url }}
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      url: ${{ steps.verify.outputs.url }}
+    env:
+      AWS_REGION: us-east-2
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+      ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
+      ECS_SERVICE: ${{ vars.ECS_SERVICE }}
+      IMAGE_NAME: 964862484349.dkr.ecr.us-east-2.amazonaws.com/${{ vars.ECR_REPOSITORY }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Validate AWS target
+        run: |
+          for name in AWS_ROLE_ARN ECR_REPOSITORY ECS_CLUSTER ECS_SERVICE; do
+            if [ -z "${!name}" ]; then echo "Missing production variable: $name" >&2; exit 1; fi
+          done
+          test "$AWS_ROLE_ARN" = arn:aws:iam::964862484349:role/agenta-deploy-role
+          test "$ECR_REPOSITORY" = agenta-backend
+          test "$ECS_CLUSTER" = default
+          test "$ECS_SERVICE" = agenta-backend-smoke
+      - name: Assume AWS deployment role with OIDC
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: '964862484349'
+      - name: Confirm AWS CLI supports ECS Express Mode
+        run: aws ecs update-express-gateway-service --generate-cli-skeleton input >/dev/null
+      - name: ECR login
+        run: |
+          registry="964862484349.dkr.ecr.$AWS_REGION.amazonaws.com"
+          aws ecr get-login-password | docker login --username AWS --password-stdin "$registry"
+      - uses: docker/setup-buildx-action@v4.4.1
+      - name: Build and push backend (linux/amd64)
+        id: build
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: backend
+          file: backend/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Verify published image in ECR
+        id: image
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          aws ecr describe-images --repository-name "$ECR_REPOSITORY" \
+            --image-ids "imageDigest=$IMAGE_DIGEST" >/dev/null
+          echo "uri=$IMAGE_NAME@$IMAGE_DIGEST" >> "$GITHUB_OUTPUT"
+      - name: Register task definition revision
+        id: task
+        env:
+          IMAGE_URI: ${{ steps.image.outputs.uri }}
+        run: |
+          service_arn="arn:aws:ecs:$AWS_REGION:964862484349:service/$ECS_CLUSTER/$ECS_SERVICE"
+          echo "service_arn=$service_arn" >> "$GITHUB_OUTPUT"
+          current_task=$(aws ecs describe-express-gateway-service --service-arn "$service_arn" \
+            --query 'service.activeConfigurations[0].taskDefinitionArn' --output text)
+          test -n "$current_task" && test "$current_task" != None
+          aws ecs describe-task-definition --task-definition "$current_task" \
+            --query taskDefinition --output json > "$RUNNER_TEMP/current-task.json"
+          python3 scripts/production/render-ecs-task-definition.py \
+            "$RUNNER_TEMP/current-task.json" "$RUNNER_TEMP/new-task.json" \
+            "$IMAGE_URI" "default-$ECS_SERVICE"
+          task_arn=$(aws ecs register-task-definition \
+            --cli-input-json "file://$RUNNER_TEMP/new-task.json" \
+            --query taskDefinition.taskDefinitionArn --output text)
+          echo "task_arn=$task_arn" >> "$GITHUB_OUTPUT"
+      - name: Update ECS Express service
+        env:
+          SERVICE_ARN: ${{ steps.task.outputs.service_arn }}
+          TASK_ARN: ${{ steps.task.outputs.task_arn }}
+        run: aws ecs update-express-gateway-service --service-arn "$SERVICE_ARN" --task-definition-arn "$TASK_ARN" >/dev/null
+      - name: Wait for healthy deployment
+        id: verify
+        env:
+          SERVICE_ARN: ${{ steps.task.outputs.service_arn }}
+          TASK_ARN: ${{ steps.task.outputs.task_arn }}
+        run: |
+          python3 scripts/production/wait-ecs-express.py "$SERVICE_ARN" "$TASK_ARN" "$ECS_CLUSTER" "$ECS_SERVICE"
+          endpoint=$(aws ecs describe-express-gateway-service --service-arn "$SERVICE_ARN" \
+            --query 'service.activeConfigurations[0].ingressPaths[0].endpoint' --output text)
+          test -n "$endpoint" && test "$endpoint" != None
+          url="https://$endpoint"
+          curl --fail --silent --show-error --retry 6 --retry-delay 10 "$url/health/live" >/dev/null
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "ECS: $url; task definition: $TASK_ARN; image: ${{ steps.image.outputs.uri }}" >> "$GITHUB_STEP_SUMMARY"
+
+  frontend:
+    name: Deploy Vercel
+    needs: backend
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.url }}
+    env:
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      NEXT_PUBLIC_API_URL: ${{ needs.backend.outputs.url }}
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version-file: frontend/.nvmrc
+      - name: Validate Vercel target
+        run: |
+          for name in VERCEL_ORG_ID VERCEL_PROJECT_ID VERCEL_TOKEN NEXT_PUBLIC_API_URL; do
+            if [ -z "${!name}" ]; then echo "Missing production setting: $name" >&2; exit 1; fi
+          done
+      - run: npm install --global vercel@59.25.2
+      # Ejecutar desde raíz: el proyecto de Vercel tiene Root Directory=frontend.
+      # Vercel conserva CLERK_SECRET_KEY: env pull devuelve [SENSITIVE].
+      - name: Build and publish production on Vercel
+        id: deploy
+        run: |
+          url=$(vercel deploy --prod --yes --token="$VERCEL_TOKEN" \
+            --project="$VERCEL_PROJECT_ID" --scope="$VERCEL_ORG_ID" \
+            --build-env="NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL" \
+            --env="NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Frontend: $url" >> "$GITHUB_STEP_SUMMARY"

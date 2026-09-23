@@ -5,7 +5,7 @@ Monorepo con backend FastAPI y frontend Next.js para estimaciones basadas en pre
 ## Estructura
 
 ```
-├── backend/          # FastAPI (Python 3.11+)
+├── backend/          # FastAPI (Python 3.12+)
 ├── frontend/         # Next.js 16 (App Router, TypeScript, Tailwind, shadcn/ui, Clerk)
 ├── vault/            # Base de conocimiento del despliegue (vacía en el repo)
 ├── vault-ejemplo/    # Notas de demostración; no se indexan en producción
@@ -14,8 +14,8 @@ Monorepo con backend FastAPI y frontend Next.js para estimaciones basadas en pre
 
 ## Prerrequisitos
 
-- Python 3.11+
-- Node.js 20+
+- Python 3.12+ (CI y contenedor: 3.12)
+- Node.js 24 LTS (ver frontend/.nvmrc)
 - Docker (opcional, para backend en contenedor)
 - Una aplicación en [Clerk](https://clerk.com) (ver [Autenticación](#autenticación))
 
@@ -27,7 +27,7 @@ Monorepo con backend FastAPI y frontend Next.js para estimaciones basadas en pre
 cd backend
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 cp .env.example .env
 uvicorn app.main:app --reload
 ```
@@ -396,3 +396,50 @@ Tests del backend (incluyen verificación JWT y sincronización de empleados):
 ```bash
 cd backend && pytest
 ```
+
+## Producción y CI/CD
+
+`ci.yml` conserva tests, lint y build en cada PR. `deploy-production.yml` ejecuta
+esas mismas comprobaciones, construye el backend para `linux/amd64`, publica la
+imagen en ECR y registra una revisión de la task definition del servicio ECS
+Express Mode. Espera a que `agenta-backend-smoke` quede activo con esa revisión y
+comprueba `/health/live`. En `main` continúa el despliegue de Vercel con la URL
+obtenida de ECS. Un `workflow_dispatch` desde una rama solo despliega el backend
+smoke; no publica el frontend en Vercel.
+
+Configurar estas **variables del GitHub Environment `production`** antes de usar
+el workflow:
+
+| Variable | Valor esperado |
+| --- | --- |
+| `AWS_ROLE_ARN` | `arn:aws:iam::964862484349:role/agenta-deploy-role` (OIDC de AWS-1) |
+| `ECR_REPOSITORY` | `agenta-backend` |
+| `ECS_CLUSTER` | `default` |
+| `ECS_SERVICE` | `agenta-backend-smoke` |
+
+La región es `us-east-2`. El workflow usa el token OIDC de GitHub para asumir el
+rol; **no requiere AWS access keys** ni secretos de AWS en GitHub. El despliegue
+de Vercel en `main` conserva `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` (variables) y
+`VERCEL_TOKEN` (secret). Las variables antiguas de GCP (`GCP_PROJECT_ID`,
+`GCP_REGION`, `CLOUD_RUN_SERVICE`, `GCP_DEPLOY_SERVICE_ACCOUNT`,
+`GCP_RUNTIME_SERVICE_ACCOUNT`, `GCP_WORKLOAD_IDENTITY_PROVIDER` y
+`ARTIFACT_REGISTRY_REPOSITORY`) ya no se usan.
+
+Antes de mergear a `main`, ejecutar `workflow_dispatch` sobre una rama de prueba
+y confirmar en la ejecución que la imagen está en ECR y la nueva revisión queda
+activa en ECS. El rol OIDC de AWS-1 y la política de ramas del entorno
+`production` aceptan actualmente solo `main`: para esta prueba hay que permitir
+temporalmente la rama en **ambas** reglas y restaurarlas al terminar. GitHub
+requiere además que el archivo del workflow exista en la rama predeterminada
+para habilitar `workflow_dispatch`. Una forma de probar sin mergear es añadir
+temporalmente `refs/heads/codex/production-cicd` a la condición `ref` del trust
+policy del rol, permitir esa rama en el entorno `production` y seleccionarla
+temporalmente como rama predeterminada. Ejecutar `workflow_dispatch` con
+`--ref codex/production-cicd`; al terminar, restaurar `main` como rama
+predeterminada, la política de ramas y el trust policy original. El perfil
+`agenta-operator` no tiene permisos para modificar el trust policy: este paso
+requiere un administrador IAM.
+
+La [guía de producción anterior](docs/PRODUCTION.md) describe la infraestructura
+GCP ya reemplazada. La [configuración IAM de AWS](infra/aws/iam/README.md)
+documenta el rol OIDC y los permisos limitados al servicio smoke.

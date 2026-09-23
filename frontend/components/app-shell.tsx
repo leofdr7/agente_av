@@ -12,23 +12,6 @@ import { cn } from "cn";
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
-  // #region agent log
-  if (typeof window !== "undefined") {
-    fetch("http://127.0.0.1:7305/ingest/112c5700-fb95-409e-b8da-cac132656b93", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "fabb64" },
-      body: JSON.stringify({
-        sessionId: "fabb64",
-        runId: "pre-fix",
-        hypothesisId: "C",
-        location: "components/app-shell.tsx:AppShell",
-        message: "client AppShell executed",
-        data: { rootClass: "min-h-dvh bg-paper", pathname },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-  }
-  // #endregion
 
   return (
     <div className="min-h-dvh bg-paper">

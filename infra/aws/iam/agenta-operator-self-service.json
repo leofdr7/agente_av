@@ -1,0 +1,37 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadOwnIdentityAndMfa",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetUser",
+        "iam:GetMFADevice",
+        "iam:ListMFADevices"
+      ],
+      "Resource": "arn:aws:iam::964862484349:user/leofdr7"
+    },
+    {
+      "Sid": "ChangeOwnPasswordAndMfa",
+      "Effect": "Allow",
+      "Action": [
+        "iam:ChangePassword",
+        "iam:EnableMFADevice",
+        "iam:ResyncMFADevice"
+      ],
+      "Resource": "arn:aws:iam::964862484349:user/leofdr7"
+    },
+    {
+      "Sid": "CreateOwnVirtualMfaDevice",
+      "Effect": "Allow",
+      "Action": "iam:CreateVirtualMFADevice",
+      "Resource": "arn:aws:iam::964862484349:mfa/leofdr7"
+    },
+    {
+      "Sid": "ListAvailableVirtualMfaDevices",
+      "Effect": "Allow",
+      "Action": "iam:ListVirtualMFADevices",
+      "Resource": "*"
+    }
+  ]
+}
